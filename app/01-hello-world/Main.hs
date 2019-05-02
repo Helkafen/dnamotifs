@@ -36,23 +36,6 @@ import Data.Monoid ((<>))
 import Data.Maybe (mapMaybe)
 
 
-
--- jaccardDistance (Motif elements length) nucleotides = Score (inter / union)
---    where inter = sum $ zipWith minNucleotideJaccardDistance elements nucleotides
---          union = sum $ zipWith maxNucleotideJaccardDistance elements nucleotides
---          minNucleotideJaccardDistance :: MotifElement -> Nucleotide -> Float
---          minNucleotideJaccardDistance (MotifElement (a, _, _, _)) A = a
---          minNucleotideJaccardDistance (MotifElement (_, c, _, _)) C = c
---          minNucleotideJaccardDistance (MotifElement (_, _, g, _)) G = g
---          minNucleotideJaccardDistance (MotifElement (_, _, _, t)) T = t
---          maxNucleotideJaccardDistance :: MotifElement -> Nucleotide -> Float
---          maxNucleotideJaccardDistance (MotifElement (a, c, g, t)) _ = max (max (max a c) g) t
-
-
---instance Storable
-
-
--- | The kernel to execute: the equivalient of 'map (*2)'.
 kernelSource :: String
 kernelSource = prettyCompact . ppr $ [cfun|
     kernel void jaccard_distance(
@@ -68,28 +51,26 @@ kernelSource = prettyCompact . ppr $ [cfun|
         // For a given position i in the chromosome
         const int i = get_global_id(0);
         const int participant_id = i / block_size;
+        const int base_index = i * 3*sizeof(int);
 
         int k = 0; // Position in the patterns array
         int match_id = 0;
         for(int j = 0; j < max_matches + 1; j++) {
-            out_matches[i * 3*sizeof(int) + (j * 4) + 0] = 0;
-            out_matches[i * 3*sizeof(int) + (j * 4) + 1] = 0;
-            out_matches[i * 3*sizeof(int) + (j * 4) + 2] = 0;
-            out_matches[i * 3*sizeof(int) + (j * 4) + 3] = 0;
+            out_matches[base_index + (j * 4) + 0] = 0;
+            out_matches[base_index + (j * 4) + 1] = 0;
+            out_matches[base_index + (j * 4) + 2] = 0;
+            out_matches[base_index + (j * 4) + 3] = 0;
         }
         int pattern_id = 0;
-        int pattern_length = -1;
-        //int last_used_match_id = -1;
         while(1) {
-            pattern_length = (int)(patterns[k]);
+            int pattern_length = (int)(patterns[k]);
             if(pattern_length <= 0) break;
             k = k + 1;
 
             float score_inter = 0;
             float score_union = 0;
             // For each position in the pattern
-            int j = 0;
-            for(j = 0; j < pattern_length && i+j < (participant_id + 1) * block_size; k = k + 5, j++) {
+            for(int j = 0; j < pattern_length && i+j < (participant_id + 1) * block_size; k = k + 5, j++) {
                 if(in[i+j] == 0) { score_inter += patterns[k+0]; }      // Nucleotide is A
                 else if(in[i+j] == 1) { score_inter += patterns[k+1]; } // Nucleotide is C
                 else if(in[i+j] == 2) { score_inter += patterns[k+2]; } // Nucleotide is G
@@ -99,10 +80,10 @@ kernelSource = prettyCompact . ppr $ [cfun|
             float score = score_inter / score_union;
 
             if(score > 0.5 && match_id < max_matches) {
-                out_matches[i * 3*sizeof(int) + (match_id * 4) + 0] = pattern_id;               // Pattern ID (0 based)
-                out_matches[i * 3*sizeof(int) + (match_id * 4) + 1] = (int)(score * 1000);      // Matching score
-                out_matches[i * 3*sizeof(int) + (match_id * 4) + 2] = in_reference_position[i]; // Position in the genome
-                out_matches[i * 3*sizeof(int) + (match_id * 4) + 3] = participant_id;           // ID of the participant (0 based)
+                out_matches[base_index + (match_id * 4) + 0] = pattern_id;               // Pattern ID (0 based)
+                out_matches[base_index + (match_id * 4) + 1] = (int)(score * 1000);      // Matching score
+                out_matches[base_index + (match_id * 4) + 2] = in_reference_position[i]; // Position in the genome
+                out_matches[base_index + (match_id * 4) + 3] = participant_id;           // ID of the participant (0 based)
                 match_id = match_id + 1;
             }
             pattern_id++;
@@ -119,16 +100,19 @@ repeatIOAction n action = do
     repeatIOAction (n-1) action -- decrement n to make it recursive
 
 inputData :: Vector CChar
-inputData = mconcat [inputDataSample0, inputDataSample1]
+inputData = mconcat $ [inputDataSample0, inputDataSample1] <> (take (100000 - 2) $ repeat inputDataSample2)
 
 inputDataSample0 :: Vector CChar
-inputDataSample0 = V.fromList [0,0,0,0,1,2,0] -- AAAACGA
+inputDataSample0 = V.fromList [0,0,0,0,1,2,0] <> V.fromList (take 100 (repeat 0)) -- AAAACGA
 
 inputDataSample1 :: Vector CChar
-inputDataSample1 = V.fromList [1,2,0,0,0,0,0] -- CGAAAAA
+inputDataSample1 = V.fromList [1,2,0,0,0,0,0] <> V.fromList (take 100 (repeat 0)) -- CGAAAAA
+
+inputDataSample2 :: Vector CChar
+inputDataSample2 = V.fromList [0,0,0,0,0,0,0] <> V.fromList (take 100 (repeat 0)) -- AAAAAAA
 
 inputDataPositions :: Vector CInt
-inputDataPositions = V.fromList (p <> p)
+inputDataPositions = V.fromList (mconcat $ take 10000 $ repeat p)
     where p = take (V.length inputDataSample0) [0..]
 
 data Pweight = Pweight {
@@ -157,11 +141,11 @@ vector4uples v = if (V.length a == 4) then a : vector4uples rest else []
 
 
 patternData :: Vector CFloat
-patternData = patternsToVector [
+patternData = patternsToVector $ [
     [Pweight 0 1 0 0, Pweight 0 0 1 0] -- CG
     ,[Pweight 0 0.1 0 0, Pweight 0 1 0 0, Pweight 0 0 1 0, Pweight 0.5 0 0 0] -- cCGA
     ,[Pweight 0 1 0 0, Pweight 0 0 1 0] -- CGA
-  ]
+  ] ++ take 50 (repeat [Pweight 0 0 0 0, Pweight 0 0 0 0, Pweight 0 0 0 0, Pweight 0 0 0 0, Pweight 0 0 0 0, Pweight 0 0 0 0, Pweight 0 0 0 0, Pweight 0 0 0 0, Pweight 0 0 0 0, Pweight 0 0 0 0]) ++ [[Pweight 0 1 0 0, Pweight 0 0 1 0]]
 
 nElem  = V.length inputData
 nBytes = nElem * sizeOf (undefined :: CChar)
@@ -204,8 +188,8 @@ loop context state kernel queue bufIn bufInPositions bufInPatterns bufOut_matche
     execEvent <- clEnqueueNDRangeKernel queue kernel [nElem] [] []
 
     -- Get the result; blocks until complete  vectorToMatches <$> 
-    outputMatches <- bufferToVector queue bufOut_matches (nElem*maxMatchesPerPosition * 3) [execEvent] :: IO (Vector Int32) -- :: IO [Match]
-    outputDebug <- bufferToVector queue bufOut_debug (nElem) [execEvent] :: IO (Vector Int32) -- :: IO [Match]
+    outputMatches <- bufferToVector queue bufOut_matches (nElem*maxMatchesPerPosition * 3) [execEvent] :: IO (Vector Int32)
+    outputDebug <- bufferToVector queue bufOut_debug (nElem) [execEvent] :: IO (Vector Int32)
 
     clReleaseEvent execEvent
 
@@ -245,16 +229,14 @@ main = do
     bufOut_matches <- clCreateBuffer context [CL_MEM_WRITE_ONLY, CL_MEM_ALLOC_HOST_PTR] (nBytesMatches, nullPtr)
     bufOut_debug <- clCreateBuffer context [CL_MEM_READ_ONLY, CL_MEM_ALLOC_HOST_PTR] (nBytes, nullPtr) -- One Int of debug per nucleotide
 
-    print inputData
-    print inputDataPositions
-    --print ("V.length inputDataSample0") >> print (V.length inputDataSample0)
-    print patternData
-    --print nBytesMatches
-    --print ((nElem + 1) * maxMatchesPerPosition)
-    t1 <- (round . (* 1000000)) <$> getPOSIXTime
+    --print inputData
+    --print inputDataPositions
+    --print patternData
+    t1 <- getPOSIXTime
     (outputData, outputDebug) <- loop context state kernel queue bufIn bufInPositions bufIn2 bufOut_matches bufOut_debug
-    t2 <- (round . (* 1000000)) <$> getPOSIXTime
-    print (t2-t1)
+    t2 <- getPOSIXTime
+    print "Time in ms"
+    print $ round $ (t2 - t1) * 1000
 
     _ <- clReleaseMemObject bufIn
     _ <- clReleaseMemObject bufIn2
@@ -267,9 +249,9 @@ main = do
     -- Show our work
     putStrLn "\n* Results *"
     --putStrLn $ "Input:  " ++ show inputData
-    putStrLn $ "Output: " ++ show outputData
+    --putStrLn $ "Output: " ++ show outputData
     putStrLn $ "Output: " ++ show (vectorToMatches outputData)
-    putStrLn $ "Output: " ++ show outputDebug
+    --putStrLn $ "Output: " ++ show outputDebug
 
 
 

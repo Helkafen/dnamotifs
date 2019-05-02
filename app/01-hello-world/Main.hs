@@ -55,13 +55,13 @@ import Data.Maybe (mapMaybe)
 -- | The kernel to execute: the equivalient of 'map (*2)'.
 kernelSource :: String
 kernelSource = prettyCompact . ppr $ [cfun|
-    /* This example kernel just does `map (*2)` */
-    kernel void doubleArray(
+    kernel void jaccard_distance(
         int size_chromosome,
         int max_matches,
         global float *in,
         global float *patterns,
-        global int *out_matches
+        global int *out_matches,
+        global int *out_debug
     ) {
         // For a given position i in the chromosome
         const int i = get_global_id(0);
@@ -73,8 +73,13 @@ kernelSource = prettyCompact . ppr $ [cfun|
             out_matches[i * 3*sizeof(int) + (j * 3) + 1] = 0;
             out_matches[i * 3*sizeof(int) + (j * 3) + 2] = 0;
         }
+        int pattern_id = 0;
+        int pattern_number = (int)(patterns[0]);
+        k = k + 1;
+        int pattern_length = -1;
+        int last_used_match_id = -1;
         while(1) {
-            int pattern_length = (int)(patterns[k]);
+            pattern_length = (int)(patterns[k]);
             if(pattern_length <= 0) break;
             k = k + 1;
 
@@ -91,24 +96,25 @@ kernelSource = prettyCompact . ppr $ [cfun|
                 m = patterns[k+4]; // max of potential scores for this position
                 score_union += m;
                 if(in[i+j] == 0) { score_inter += a; }
-                if(in[i+j] == 1) { score_inter += c; }
+                if(in[i+j] == 1) { score_inter += c; } // else
                 if(in[i+j] == 2) { score_inter += g; }
                 if(in[i+j] == 3) { score_inter += t; }
             }
             float score = score_inter / score_union;
-            if(score > 0.5 && match_id < max_matches) {
-                //barrier(CLK_LOCAL_MEM_FENCE);
-                //barrier(CLK_GLOBAL_MEM_FENCE);
-                out_matches[i * 3*sizeof(int) + match_id * 3 + 0] = (int)((k-1) / 5) - 1; // Pattern ID (0 based)
-                out_matches[i * 3*sizeof(int) + match_id * 3 + 1] = (int)(score * 1000);  // Matching score
-                out_matches[i * 3*sizeof(int) + match_id * 3 + 2] = i;                    // Position in the genome (in the current batch?)
-                match_id++;
+            if(last_used_match_id == -1) {
+                last_used_match_id = pattern_length;
             }
-            //break;
-        }
+            if(score > 0.5 && match_id < max_matches) {
+                out_matches[i * 3*sizeof(int) + (match_id * 3) + 0] = pattern_id;           // Pattern ID (0 based)
+                out_matches[i * 3*sizeof(int) + (match_id * 3) + 1] = (int)(score * 1000);  // Matching score
+                out_matches[i * 3*sizeof(int) + (match_id * 3) + 2] = i;                    // Position in the genome (in the current batch?)
 
-        
-        barrier(CLK_LOCAL_MEM_FENCE);
+
+                match_id = match_id + 1;
+            }
+            pattern_id++;
+        }
+        out_debug[i] = last_used_match_id;
     }
 |]
 
@@ -147,7 +153,10 @@ vector3uples v = if (V.length a == 3) then a : vector3uples rest else []
 
 
 patternData :: Vector CFloat
-patternData = patternsToVector [[Pweight 0 1 0 0, Pweight 0 0 1 0]] -- CG --V.fromList [2, 100,101,102,103,103, 0]
+patternData = patternsToVector [
+    [Pweight 0 1 0 0, Pweight 0 0 1 0] -- CG
+    ,[Pweight 0 0.1 0 0, Pweight 0 1 0 0, Pweight 0 0 1 0, Pweight 0.5 0 0 0] -- CGA
+  ]
 
 nElem  = V.length inputData
 nBytes = nElem * sizeOf (undefined :: CFloat)
@@ -156,8 +165,10 @@ maxMatchesPerPosition = 3
 nBytesMatches = nElem * (maxMatchesPerPosition * 3 * sizeOf (undefined :: Int32))
 
 patternToVector :: Pattern -> Vector CFloat
-patternToVector [] = V.empty
-patternToVector (x:xs) = V.fromList [wa x, wc x, wg x, wt x, maximum [wa x, wc x, wg x, wt x]] <> patternToVector xs
+patternToVector p = V.fromList [fromIntegral $ length p] <> go p
+  where
+    go [] = V.empty
+    go (x:xs) =  V.fromList [wa x, wc x, wg x, wt x, maximum [wa x, wc x, wg x, wt x]] <> go xs
 
 patternsToVector :: [Pattern] -> Vector CFloat
 patternsToVector patterns = V.fromList [fromIntegral $ length patterns] <> mconcat (map patternToVector patterns) <> V.fromList [0]
@@ -166,7 +177,7 @@ nElemPattern  = V.length patternData
 nBytesPattern = nElemPattern * sizeOf (undefined :: CFloat)
 
 --loop :: CLContext -> OpenCLState -> CLKernel -> CLCommandQueue -> IO (Vector CFloat)
-loop context state kernel queue bufIn bufIn2 bufOut_matches = do
+loop context state kernel queue bufIn bufIn2 bufOut_matches bufOut_debug = do
 
     -- Copy our input data Vector to the input buffer; blocks until complete
     --writeVectorToBuffer state bufIn (10000 :: CInt)
@@ -180,15 +191,17 @@ loop context state kernel queue bufIn bufIn2 bufOut_matches = do
     clSetKernelArgSto kernel 2 bufIn
     clSetKernelArgSto kernel 3 bufIn2
     clSetKernelArgSto kernel 4 bufOut_matches
+    clSetKernelArgSto kernel 5 bufOut_debug
 
     execEvent <- clEnqueueNDRangeKernel queue kernel [nElem] [] []
 
     -- Get the result; blocks until complete  vectorToMatches <$> 
     outputMatches <- bufferToVector queue bufOut_matches (nElem*maxMatchesPerPosition * 3) [execEvent] :: IO (Vector Int32) -- :: IO [Match]
+    outputDebug <- bufferToVector queue bufOut_debug (nElem) [execEvent] :: IO (Vector Int32) -- :: IO [Match]
 
     clReleaseEvent execEvent
 
-    return outputMatches
+    return (outputMatches, outputDebug)
 
 main :: IO ()
 main = do
@@ -212,7 +225,7 @@ main = do
     -- Create the Kernel
     program <- clCreateProgramWithSource context kernelSource
     clBuildProgram program [device] ""
-    kernel <- clCreateKernel program "doubleArray"
+    kernel <- clCreateKernel program "jaccard_distance"
 
     -- Buffers for input and output data.
     -- We request OpenCL to create a buffer on the host (CL_MEM_ALLOC_HOST_PTR)
@@ -221,13 +234,14 @@ main = do
     bufIn <- clCreateBuffer context [CL_MEM_READ_ONLY, CL_MEM_ALLOC_HOST_PTR] (nBytes, nullPtr)
     bufIn2 <- clCreateBuffer context [CL_MEM_READ_ONLY, CL_MEM_ALLOC_HOST_PTR] (nBytesPattern, nullPtr)
     bufOut_matches <- clCreateBuffer context [CL_MEM_WRITE_ONLY, CL_MEM_ALLOC_HOST_PTR] (nBytesMatches, nullPtr)
+    bufOut_debug <- clCreateBuffer context [CL_MEM_READ_ONLY, CL_MEM_ALLOC_HOST_PTR] (nBytes, nullPtr) -- whatever
 
     print ("maxMatchesPerPosition") >> print maxMatchesPerPosition
     print patternData
     print nBytesMatches
     print ((nElem + 1) * maxMatchesPerPosition)
     t1 <- (round . (* 1000000)) <$> getPOSIXTime
-    outputData <- loop context state kernel queue bufIn bufIn2 bufOut_matches
+    (outputData, outputDebug) <- loop context state kernel queue bufIn bufIn2 bufOut_matches bufOut_debug
     t2 <- (round . (* 1000000)) <$> getPOSIXTime
     print (t2-t1)
 
@@ -244,6 +258,7 @@ main = do
     --putStrLn $ "Input:  " ++ show inputData
     putStrLn $ "Output: " ++ show outputData
     putStrLn $ "Output: " ++ show (vectorToMatches outputData)
+    putStrLn $ "Output: " ++ show outputDebug
 
 
 

@@ -26,7 +26,7 @@ import           Control.Monad                   (forM_, when)
 import           Data.Vector.Storable            (Vector)
 import qualified Data.Vector.Storable            as V
 import           Foreign                         (nullPtr, sizeOf)
-import           Foreign.C.Types                 (CFloat, CInt)
+import           Foreign.C.Types                 (CFloat, CInt, CChar)
 import           Language.C.Quote.OpenCL         (cfun)
 import           Text.PrettyPrint.Mainland       (prettyCompact)
 import           Text.PrettyPrint.Mainland.Class (ppr)
@@ -57,22 +57,25 @@ kernelSource :: String
 kernelSource = prettyCompact . ppr $ [cfun|
     kernel void jaccard_distance(
         int size_chromosome,
+        int block_size,
         int max_matches,
-        global float *in,
+        global char *in,
         global int *in_reference_position,
-        global float *patterns,
+        constant float *patterns,
         global int *out_matches,
         global int *out_debug
     ) {
         // For a given position i in the chromosome
         const int i = get_global_id(0);
+        const int participant_id = i / block_size;
 
         int k = 0; // Position in the patterns array
         int match_id = 0;
         for(int j = 0; j < max_matches + 1; j++) {
-            out_matches[i * 3*sizeof(int) + (j * 3) + 0] = 0;
-            out_matches[i * 3*sizeof(int) + (j * 3) + 1] = 0;
-            out_matches[i * 3*sizeof(int) + (j * 3) + 2] = 0;
+            out_matches[i * 3*sizeof(int) + (j * 4) + 0] = 0;
+            out_matches[i * 3*sizeof(int) + (j * 4) + 1] = 0;
+            out_matches[i * 3*sizeof(int) + (j * 4) + 2] = 0;
+            out_matches[i * 3*sizeof(int) + (j * 4) + 3] = 0;
         }
         int pattern_id = 0;
         int pattern_length = -1;
@@ -86,7 +89,7 @@ kernelSource = prettyCompact . ppr $ [cfun|
             float score_union = 0;
             // For each position in the pattern
             int j = 0;
-            for(j = 0; j < pattern_length && i+j < size_chromosome; k = k + 5, j++) {
+            for(j = 0; j < pattern_length && i+j < (participant_id + 1) * block_size; k = k + 5, j++) {
                 if(in[i+j] == 0) { score_inter += patterns[k+0]; }      // Nucleotide is A
                 else if(in[i+j] == 1) { score_inter += patterns[k+1]; } // Nucleotide is C
                 else if(in[i+j] == 2) { score_inter += patterns[k+2]; } // Nucleotide is G
@@ -96,9 +99,10 @@ kernelSource = prettyCompact . ppr $ [cfun|
             float score = score_inter / score_union;
 
             if(score > 0.5 && match_id < max_matches) {
-                out_matches[i * 3*sizeof(int) + (match_id * 3) + 0] = pattern_id;               // Pattern ID (0 based)
-                out_matches[i * 3*sizeof(int) + (match_id * 3) + 1] = (int)(score * 1000);      // Matching score
-                out_matches[i * 3*sizeof(int) + (match_id * 3) + 2] = in_reference_position[i]; // Position in the genome
+                out_matches[i * 3*sizeof(int) + (match_id * 4) + 0] = pattern_id;               // Pattern ID (0 based)
+                out_matches[i * 3*sizeof(int) + (match_id * 4) + 1] = (int)(score * 1000);      // Matching score
+                out_matches[i * 3*sizeof(int) + (match_id * 4) + 2] = in_reference_position[i]; // Position in the genome
+                out_matches[i * 3*sizeof(int) + (match_id * 4) + 3] = participant_id;           // ID of the participant (0 based)
                 match_id = match_id + 1;
             }
             pattern_id++;
@@ -114,11 +118,18 @@ repeatIOAction n action = do
     _ <- action n                                 -- action to perform
     repeatIOAction (n-1) action -- decrement n to make it recursive
 
-inputData :: Vector CFloat
-inputData = V.fromList [0,0,0,0,1,2,0] -- AAAACGAAA
+inputData :: Vector CChar
+inputData = mconcat [inputDataSample0, inputDataSample1]
+
+inputDataSample0 :: Vector CChar
+inputDataSample0 = V.fromList [0,0,0,0,1,2,0] -- AAAACGA
+
+inputDataSample1 :: Vector CChar
+inputDataSample1 = V.fromList [1,2,0,0,0,0,0] -- CGAAAAA
 
 inputDataPositions :: Vector CInt
-inputDataPositions = V.fromList (take (V.length inputData) [0..])
+inputDataPositions = V.fromList (p <> p)
+    where p = take (V.length inputDataSample0) [0..]
 
 data Pweight = Pweight {
     wa :: CFloat,
@@ -132,16 +143,17 @@ type Pattern = [Pweight]
 data Match = Match {
     mPatternId :: Int, -- 0 based
     mScore :: Int,     -- 0 - 1000
-    mPosition :: Int   -- 0 based
+    mPosition :: Int,  -- 0 based
+    mSampleId :: Int
 } deriving (Show)
 
 vectorToMatches :: Vector Int32 -> [Match]
-vectorToMatches v = mapMaybe toMatch (vector3uples v)
-    where toMatch x = if x V.! 1 > 0 then Just (Match (fromIntegral $ x V.! 0) (fromIntegral $ x V.! 1) (fromIntegral $ x V.! 2)) else Nothing
+vectorToMatches v = mapMaybe toMatch (vector4uples v)
+    where toMatch x = if x V.! 1 > 0 then Just (Match (fromIntegral $ x V.! 0) (fromIntegral $ x V.! 1) (fromIntegral $ x V.! 2) (fromIntegral $ x V.! 3)) else Nothing
 
-vector3uples :: V.Storable a => Vector a -> [Vector a]
-vector3uples v = if (V.length a == 3) then a : vector3uples rest else []
-    where (a, rest) = V.splitAt 3 v
+vector4uples :: V.Storable a => Vector a -> [Vector a]
+vector4uples v = if (V.length a == 4) then a : vector4uples rest else []
+    where (a, rest) = V.splitAt 4 v
 
 
 patternData :: Vector CFloat
@@ -152,11 +164,11 @@ patternData = patternsToVector [
   ]
 
 nElem  = V.length inputData
-nBytes = nElem * sizeOf (undefined :: CFloat)
+nBytes = nElem * sizeOf (undefined :: CChar)
 nBytesPositions = nElem * sizeOf (undefined :: CInt)
 
 maxMatchesPerPosition = 3
-nBytesMatches = nElem * (maxMatchesPerPosition * 3 * sizeOf (undefined :: Int32))
+nBytesMatches = nElem * (maxMatchesPerPosition * 4 * sizeOf (undefined :: Int32))
 
 patternToVector :: Pattern -> Vector CFloat
 patternToVector p = V.fromList [fromIntegral $ length p] <> go p
@@ -174,18 +186,20 @@ nBytesPattern = nElemPattern * sizeOf (undefined :: CFloat)
 loop context state kernel queue bufIn bufInPositions bufInPatterns bufOut_matches bufOut_debug = do
 
     -- Copy our input data Vector to the input buffer; blocks until complete
+    --writeVectorToImage :: state bufIn (Int,Int,1) -> inputData -- dums: w h d
     writeVectorToBuffer state bufIn inputData
     writeVectorToBuffer state bufInPositions inputDataPositions
     writeVectorToBuffer state bufInPatterns patternData
 
     -- Run the kernel
     clSetKernelArgSto kernel 0 ((V.length patternData) :: Int)
-    clSetKernelArgSto kernel 1 (maxMatchesPerPosition :: Int)
-    clSetKernelArgSto kernel 2 bufIn
-    clSetKernelArgSto kernel 3 bufInPositions
-    clSetKernelArgSto kernel 4 bufInPatterns
-    clSetKernelArgSto kernel 5 bufOut_matches
-    clSetKernelArgSto kernel 6 bufOut_debug
+    clSetKernelArgSto kernel 1 ((V.length inputDataSample0) :: Int)
+    clSetKernelArgSto kernel 2 (maxMatchesPerPosition :: Int)
+    clSetKernelArgSto kernel 3 bufIn
+    clSetKernelArgSto kernel 4 bufInPositions
+    clSetKernelArgSto kernel 5 bufInPatterns
+    clSetKernelArgSto kernel 6 bufOut_matches
+    clSetKernelArgSto kernel 7 bufOut_debug
 
     execEvent <- clEnqueueNDRangeKernel queue kernel [nElem] [] []
 
@@ -231,10 +245,12 @@ main = do
     bufOut_matches <- clCreateBuffer context [CL_MEM_WRITE_ONLY, CL_MEM_ALLOC_HOST_PTR] (nBytesMatches, nullPtr)
     bufOut_debug <- clCreateBuffer context [CL_MEM_READ_ONLY, CL_MEM_ALLOC_HOST_PTR] (nBytes, nullPtr) -- One Int of debug per nucleotide
 
-    print ("maxMatchesPerPosition") >> print maxMatchesPerPosition
+    print inputData
+    print inputDataPositions
+    --print ("V.length inputDataSample0") >> print (V.length inputDataSample0)
     print patternData
-    print nBytesMatches
-    print ((nElem + 1) * maxMatchesPerPosition)
+    --print nBytesMatches
+    --print ((nElem + 1) * maxMatchesPerPosition)
     t1 <- (round . (* 1000000)) <$> getPOSIXTime
     (outputData, outputDebug) <- loop context state kernel queue bufIn bufInPositions bufIn2 bufOut_matches bufOut_debug
     t2 <- (round . (* 1000000)) <$> getPOSIXTime

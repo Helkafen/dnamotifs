@@ -22,7 +22,7 @@ import           CLUtil         (OpenCLState (OpenCLState),
 import CLUtil.VectorBuffers (bufferToVector, writeVectorToBuffer)
 import           Control.Parallel.OpenCL
 
-import           Control.Monad                   (forM_, when)
+import           Control.Monad                   (forM_)
 import           Data.Vector.Storable            (Vector)
 import qualified Data.Vector.Storable            as V
 import           Foreign                         (nullPtr, sizeOf)
@@ -70,11 +70,19 @@ kernelSource = prettyCompact . ppr $ [cfun|
             float score_inter = 0;
             float score_union = 0;
             // For each position in the pattern
-            for(int j = 0; j < pattern_length && i+j < (participant_id + 1) * block_size; k = k + 5, j++) {
-                if(in[i+j] == 0) { score_inter += patterns[k+0]; }      // Nucleotide is A
-                else if(in[i+j] == 1) { score_inter += patterns[k+1]; } // Nucleotide is C
-                else if(in[i+j] == 2) { score_inter += patterns[k+2]; } // Nucleotide is G
-                else if(in[i+j] == 3) { score_inter += patterns[k+3]; } // Nucleotide is T
+
+            // Equivalent to j < pattern_length && i+j < (participant_id + 1) * block_size. Saves 5% of runtime
+            const max_index = min(pattern_length, (participant_id + 1) * block_size - i);
+
+            for(int j = 0; j < max_index; k = k + 5, j++) {
+                score_inter += patterns[k+in[i+j]];
+                // Equivalent to the following. Saves 33% of runtime
+
+                //if(in[i+j] == 0) { score_inter += patterns[k+0]; }      // Nucleotide is A
+                //else if(in[i+j] == 1) { score_inter += patterns[k+1]; } // Nucleotide is C
+                //else if(in[i+j] == 2) { score_inter += patterns[k+2]; } // Nucleotide is G
+                //else if(in[i+j] == 3) { score_inter += patterns[k+3]; } // Nucleotide is T
+
                 score_union += patterns[k+4]; // max of potential scores for this position
             }
             float score = score_inter / score_union;
@@ -103,13 +111,13 @@ inputData :: Vector CChar
 inputData = mconcat $ [inputDataSample0, inputDataSample1] <> (take (100000 - 2) $ repeat inputDataSample2)
 
 inputDataSample0 :: Vector CChar
-inputDataSample0 = V.fromList [0,0,0,0,1,2,0] <> V.fromList (take 100 (repeat 0)) -- AAAACGA
+inputDataSample0 = V.fromList [0,0,0,0,1,2,0] <> V.fromList (take 93 (repeat 0)) -- AAAACGA
 
 inputDataSample1 :: Vector CChar
-inputDataSample1 = V.fromList [1,2,0,0,0,0,0] <> V.fromList (take 100 (repeat 0)) -- CGAAAAA
+inputDataSample1 = V.fromList [1,2,0,0,0,0,0] <> V.fromList (take 93 (repeat 0)) -- CGAAAAA
 
 inputDataSample2 :: Vector CChar
-inputDataSample2 = V.fromList [0,0,0,0,0,0,0] <> V.fromList (take 100 (repeat 0)) -- AAAAAAA
+inputDataSample2 = V.fromList [0,0,0,0,0,0,0] <> V.fromList (take 93 (repeat 0)) -- AAAAAAA
 
 inputDataPositions :: Vector CInt
 inputDataPositions = V.fromList (mconcat $ take 10000 $ repeat p)
@@ -129,7 +137,7 @@ data Match = Match {
     mScore :: Int,     -- 0 - 1000
     mPosition :: Int,  -- 0 based
     mSampleId :: Int
-} deriving (Show)
+} deriving (Eq, Show)
 
 vectorToMatches :: Vector Int32 -> [Match]
 vectorToMatches v = mapMaybe toMatch (vector4uples v)
@@ -166,8 +174,8 @@ patternsToVector patterns = mconcat (map patternToVector patterns) <> V.fromList
 nElemPattern  = V.length patternData
 nBytesPattern = nElemPattern * sizeOf (undefined :: CFloat)
 
---loop :: CLContext -> OpenCLState -> CLKernel -> CLCommandQueue -> IO (Vector CFloat)
-loop context state kernel queue bufIn bufInPositions bufInPatterns bufOut_matches bufOut_debug = do
+--loop :: OpenCLState -> CLKernel -> CLCommandQueue -> IO (Vector CFloat)
+loop state kernel queue bufIn bufInPositions bufInPatterns bufOut_matches bufOut_debug = do
 
     -- Copy our input data Vector to the input buffer; blocks until complete
     --writeVectorToImage :: state bufIn (Int,Int,1) -> inputData -- dums: w h d
@@ -195,6 +203,9 @@ loop context state kernel queue bufIn bufInPositions bufInPatterns bufOut_matche
 
     return (outputMatches, outputDebug)
 
+-- 100000 * (3000000000 * 0.003) * 50 * 10 * 10 / 1000000000 / 3600 / 24
+-- 52.083333333333336
+-- 100000. * 50 * 10 * 10 / 1000000000 = Gops for 1bp
 main :: IO ()
 main = do
     putStrLn "* Hello World OpenCL Example *"
@@ -233,7 +244,7 @@ main = do
     --print inputDataPositions
     --print patternData
     t1 <- getPOSIXTime
-    (outputData, outputDebug) <- loop context state kernel queue bufIn bufInPositions bufIn2 bufOut_matches bufOut_debug
+    (outputData, outputDebug) <- loop state kernel queue bufIn bufInPositions bufIn2 bufOut_matches bufOut_debug
     t2 <- getPOSIXTime
     print "Time in ms"
     print $ round $ (t2 - t1) * 1000
@@ -243,7 +254,7 @@ main = do
     _ <- clReleaseMemObject bufOut_matches
 
     -- Clean up the Context
-    clFlush queue
+    _ <- clFlush queue
     _ <- clReleaseContext context
 
     -- Show our work
@@ -251,7 +262,8 @@ main = do
     --putStrLn $ "Input:  " ++ show inputData
     --putStrLn $ "Output: " ++ show outputData
     putStrLn $ "Output: " ++ show (vectorToMatches outputData)
-    --putStrLn $ "Output: " ++ show outputDebug
+    putStrLn $ "Non regression: " ++ show (vectorToMatches outputData == [Match {mPatternId = 1, mScore = 961, mPosition = 3, mSampleId = 0},Match {mPatternId = 0, mScore = 1000, mPosition = 4, mSampleId = 0},Match {mPatternId = 2, mScore = 1000, mPosition = 4, mSampleId = 0},Match {mPatternId = 53, mScore = 1000, mPosition = 4, mSampleId = 0},Match {mPatternId = 0, mScore = 1000, mPosition = 0, mSampleId = 1},Match {mPatternId = 2, mScore = 1000, mPosition = 0, mSampleId = 1},Match {mPatternId = 53, mScore = 1000, mPosition = 0, mSampleId = 1}])
+    putStrLn $ "Output: " ++ show (V.take 100 outputDebug)
 
 
 

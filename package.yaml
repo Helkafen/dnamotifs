@@ -21,6 +21,8 @@ dependencies:
 - OpenCL
 - vector
 - time
+- raw-strings-qq
+- inline-c
 
 ghc-options:
   - -Wall

@@ -29,7 +29,8 @@ import           Control.Monad                   (forM_)
 import           Data.Vector.Storable            (Vector)
 import qualified Data.Vector.Storable            as V
 import qualified Data.Vector.Storable.Mutable    as VM
-import           Foreign                         (nullPtr, sizeOf)
+import           Foreign                         (nullPtr, sizeOf, Ptr, alloca, peek, ForeignPtr, FunPtr) 
+import Foreign.ForeignPtr (newForeignPtr)
 import           Foreign.C.Types                 (CFloat, CInt, CChar, CDouble)
 import           Language.C.Quote.OpenCL         (cfun)
 import           Text.PrettyPrint.Mainland       (prettyCompact)
@@ -90,12 +91,6 @@ kernelSource =
             score_union += patterns[k + 4]; // TODO that's actually a constant, except at the end of the chromosome. I should add the score_union right after the pattern length
         }
         
-        //float s = score_inter / score_union;
-        //unsigned short score = 0;
-        //if(s > 0.5) {
-
-        //}
-        //float s = (1000 * score_inter / score_union);
         unsigned short score = 0;
 
         // One best match per position.
@@ -168,16 +163,13 @@ data Match = Match {
 
 numberOfBases = 100
 
-vectorToMatches :: Int32 -> Vector Int32 -> [Match]
-vectorToMatches minScore v = let a = BoxedVec.imapMaybe toMatch (V.convert v)
-                        --b = V.convert a :: BoxedVec.Vector Match
-                    in BoxedVec.toList a
-    where toMatch :: Int -> Int32 -> Maybe Match
-          toMatch i x = 
-            case Bits.shiftR x 16 of
-                0 -> Nothing
-                score -> if score > minScore then Just $ Match (fromIntegral $ flip Bits.shiftR 16 $ Bits.shiftL x 16) (fromIntegral score) (fromIntegral i `mod` numberOfBases) (i `div` numberOfBases) else Nothing
+vectorToMatches :: Vector CInt -> [Match]
+vectorToMatches v = map toMatch (list4uple $ V.toList v)
+    where toMatch (p,s,pos,sam) = Match (fromIntegral p) (fromIntegral s) (fromIntegral pos) (fromIntegral sam)
 
+list4uple :: [a] -> [(a,a,a,a)]
+list4uple (a:b:c:d:xs) = (a,b,c,d):(list4uple xs)
+list4uple _ = []
 
 vector4uples :: V.Storable a => Vector a -> [Vector a]
 vector4uples v = if (V.length a == 4) then a : vector4uples rest else []
@@ -246,7 +238,7 @@ loop state kernel queue bufIn bufInPositions bufInPatterns bufOut_matches bufOut
 
 
 
-C.context (C.baseCtx <> C.vecCtx)
+C.context (C.baseCtx <> C.vecCtx <> C.fptrCtx)
 C.include "<stdio.h>"
 C.include "<math.h>"
 C.include "<stdlib.h>"
@@ -271,81 +263,109 @@ C.include "<stdlib.h>"
 -- 2, 2000, 0,1000,0,0,1000,   0,0,1000,0,1000,
 -- 0]
 
-find_patterns :: CInt -> CInt -> Vector CChar -> Vector CInt -> VM.IOVector CInt -> IO CInt
-find_patterns sample_size block_size vec pat res = [C.block| int {
-    struct Match {
+foreign import ccall "&free" freePtr :: FunPtr (Ptr CInt-> IO ())
+
+find_patterns :: CInt -> CInt -> Vector CChar -> Vector CInt -> Ptr CInt -> IO (Ptr CInt)
+find_patterns sample_size block_size vec pat res_size = [C.block| int* {
+    typedef struct Match {
         int score;
         int pattern;
-    };
+        int sample;
+        int position;
+        struct Match* next;
+    } Match;
+
+    typedef struct MatchRecord {
+        int score;
+        int pattern;
+        int sample;
+        int position;
+    } MatchRecord;
 
     int sample_size = $(int sample_size);
     int block_size = $(int block_size);
     int* patterns = $vec-ptr:(int *pat);
     char* in = $vec-ptr:(char *vec);
 
-    //struct Match *match = malloc (sample_size * 10 * sizeof (struct Match));
+    Match *match_head = (Match*)0;
+    int match_number = 0;
 
     for(int sample = 0; sample < sample_size; sample++) {
-        //printf("Sample %i\n",sample);
         for(int position = 0; position < block_size; position++) {
             int i = sample*block_size + position;
 
             int k = 0;
+            int j = 0;
             
             int pattern_id = 0;
             
             int pattern_length = -1;
             while (1) {
-                pattern_length = patterns[k];
+                pattern_length = patterns[k]; k = k + 1;
+                int score_union = patterns[k]; k = k + 1;
+                int score_inter = 0;
                 
+                // End of pattern list
                 if (pattern_length <= 0) {
-                    //printf("end of patterns\n");
                     break;
                 }
-                else {
-                    //printf("pattern length %d\n", pattern_length);
-                }
-
-                k = k + 1;
-                int score_inter = 0;
-                int score_union = patterns[k];
-                k = k + 1;
-                
+                                
                 const int bound1 = ((sample + 1) * block_size) - i;
                 const int max_index = bound1 < pattern_length ? bound1 : pattern_length;
             
                 // Hotspot loop
-                const int* patterns_k = &(patterns[k]);
-                const char* in_i = &(in[i]);
-                int j = 0;
-                for (int j = 0; j < max_index; k = k + 5, j++) {
-                    score_inter += patterns_k[in_i[j]]; // TODO manage the "N" case as well
+                for (j = 0; j < max_index; k = k + 5, j++) {
+                    score_inter += patterns[k + in[i + j]]; // TODO manage the "N" case as well
                 }
+
                 // Move to the next pattern anyway if j was restricted by the size of the block
                 if(bound1 == max_index) {
                     k -= j*5;
                     k += pattern_length*5;
                 }
-                //printf("Hello");
+
                 int score = (1000 * score_inter) / score_union;
                 if(score >= 500) {
-                    //score += 1;
-                    //struct Match *match = malloc (sizeof (struct Match));
-                    //if (match == 0)
-                    //    return -1;
-                    //match->score = score;
-                    //match->pattern = pattern_id;
-
-                    //printf("score %d (%d/%d) pattern_id %d position %d sample %d\n", score, score_inter, score_union, pattern_id, position, sample);
-                    printf("score %i\n", score);
-                    //printf("Hello %d %d pat=%d p_l=%d max_index=%d bound1=%d k =%d\n", sample, position, pattern_id, pattern_length, max_index, bound1,k);
+                    struct Match *match = malloc (sizeof (struct Match));
+                    if (match == 0)
+                        return ((int*)(-1));
+                    match->score = score;
+                    match->pattern = pattern_id;
+                    match->sample = sample;
+                    match->position = position;
+                    if(match_head == 0) {
+                        match_head = match;
+                        match->next = 0;
+                    }
+                    else {
+                        match->next = match_head;
+                        match_head = match;
+                    }
+                    match_number++;
                 }
                 pattern_id++;
             }
         }
     }
 
-    return 0;
+    int *matches = malloc (match_number * 4 * sizeof (int));
+    Match* p = match_head;
+    int n = 0;
+    while(p) {
+        printf("Match score=%d pattern_id=%d sample_id=%d position=%d \n", p->score, p->pattern, p->sample, p->position);
+        matches[n*4+0] = p->pattern;
+        matches[n*4+1] = p->score;
+        matches[n*4+2] = p->position;
+        matches[n*4+3] = p->sample;
+        Match* to_be_freed = p;
+        p = p->next;
+        free(to_be_freed);
+        n++;
+    }
+    printf("match_number in this block: %d\n", match_number);
+    *($(int* res_size)) = match_number;
+
+    return (int*)matches;
   } |]
 
 
@@ -360,15 +380,26 @@ find_patterns sample_size block_size vec pat res = [C.block| int {
 main = do
     --x <- readAndSum 2
     --print x
-    pf <- VM.new 10000
+    --pf <- VM.new 10000 :: VM.IOVector CInt
     let block_size = 100
-    print patternData
+    --print patternData
     t1 <- getPOSIXTime
-    x <- find_patterns (fromIntegral numberOfPeople) block_size (inputData :: Vector CChar) (patternData :: Vector CInt) (pf :: VM.IOVector CInt)
-    print x
+    result <- alloca $ \n_ptr -> do
+        x <- find_patterns (fromIntegral numberOfPeople) block_size (inputData :: Vector CChar) (patternData :: Vector CInt) (n_ptr :: Ptr CInt)  --(pf :: VM.IOVector CInt)
+        result_size <- peek (n_ptr :: Ptr CInt)
+        fptr <- newForeignPtr freePtr x
+        print ("result_size", result_size)
+        --return result_size
+        return $ V.unsafeFromForeignPtr0 fptr (fromIntegral (4 * result_size))
+    --print result
     t2 <- getPOSIXTime
     print "Time in ms"
     print $ round $ (t2 - t1) * 1000
+    let a = vectorToMatches (result :: Vector CInt)
+    print a
+    --print $ patternToVector [Pweight 0 0.1 0 0, Pweight 0 1 0 0, Pweight 0 0 1 0, Pweight 0.5 0 0 0]
+    
+
 
 main2 :: IO ()
 main2 = do
@@ -438,8 +469,8 @@ main2 = do
     putStrLn "\n* Results *"
     putStrLn $ "Input:  " ++ show (V.length inputData)
     --putStrLn $ "Output: " ++ show outputData
-    let matches = concatMap (vectorToMatches 500) outputData
-    putStrLn $ "Output: " ++ show (matches)
+    --let matches = concatMap (vectorToMatches 500) outputData
+    --putStrLn $ "Output: " ++ show (matches)
     --putStrLn $ "Non regression: " ++ show (matches == [Match {mPatternId = 1, mScore = 961, mPosition = 3, mSampleId = 0},Match {mPatternId = 0, mScore = 1000, mPosition = 4, mSampleId = 0},Match {mPatternId = 2, mScore = 1000, mPosition = 4, mSampleId = 0},Match {mPatternId = 53, mScore = 1000, mPosition = 4, mSampleId = 0},Match {mPatternId = 0, mScore = 1000, mPosition = 0, mSampleId = 1},Match {mPatternId = 2, mScore = 1000, mPosition = 0, mSampleId = 1},Match {mPatternId = 53, mScore = 1000, mPosition = 0, mSampleId = 1}])
     --putStrLn $ "Output: " ++ show (V.take 100 outputDebug)<
 

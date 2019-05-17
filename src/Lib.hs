@@ -14,7 +14,7 @@ import           Data.Monoid                     ((<>))
 import Types
 
 newtype Patterns = Patterns (Vector CInt)
-data NucleotideAndPositionBlock = NucleotideAndPositionBlock (Vector Nucleotide) (Vector Position)
+data NucleotideAndPositionBlock = NucleotideAndPositionBlock Int (Vector Nucleotide) (Vector Position)
 
 vectorToMatches :: Vector CInt -> [Match]
 vectorToMatches v = map toMatch (list4uple $ V.toList v)
@@ -31,7 +31,13 @@ patternToVector p = V.fromList [fromIntegral $ length p, sum (map (floor . (*100
     m x = maximum [wa x, wc x, wg x, wt x]
 
 mkNucleotideAndPositionBlock :: [(Vector Nucleotide, Vector CInt)] -> NucleotideAndPositionBlock
-mkNucleotideAndPositionBlock xs = NucleotideAndPositionBlock (mconcat $ map fst xs) (mconcat $ map snd xs)  -- TODO fill with N if sizes are different
+mkNucleotideAndPositionBlock [] = NucleotideAndPositionBlock 0 V.empty V.empty
+mkNucleotideAndPositionBlock xs = case (max_length - min_length) of
+        0 -> NucleotideAndPositionBlock max_length (mconcat $ map fst xs) (mconcat $ map snd xs)
+        _ -> NucleotideAndPositionBlock max_length (mconcat $ map (pad n . fst) xs) (mconcat $ map (pad 0 . snd) xs)  -- Pad with nucleotide N if sizes are different
+    where max_length = maximum (map (V.length . fst) xs)
+          min_length = minimum (map (V.length . fst) xs)
+          pad e v = v <> (V.fromList $ take (max_length - V.length v) (repeat e))
 
 
 mkPatterns :: [Pattern] -> Patterns
@@ -150,8 +156,8 @@ find_patterns sample_size block_size vec pos pat res_size = [C.block| int* {
     } |]
 
 
-findPatternsInBlock :: Integral a => a -> a -> NucleotideAndPositionBlock -> Patterns -> IO [Match]
-findPatternsInBlock numberOfPeople block_size (NucleotideAndPositionBlock inputData positionData) (Patterns patternData) = do
+findPatternsInBlock :: Integral a => a -> NucleotideAndPositionBlock -> Patterns -> IO [Match]
+findPatternsInBlock numberOfPeople (NucleotideAndPositionBlock block_size inputData positionData) (Patterns patternData) = do
     result <- alloca $ \n_ptr -> do
         x <- find_patterns (fromIntegral numberOfPeople) (fromIntegral block_size) inputData positionData patternData (n_ptr :: Ptr CInt)
         result_size <- peek n_ptr

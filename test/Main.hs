@@ -26,12 +26,12 @@ pattern_CGA = [Pweight 0 1 0 0, Pweight 0 0 1 0]
 pattern_cccccccccc = [cPattern, cPattern, cPattern, cPattern, cPattern, cPattern, cPattern, cPattern, cPattern, cPattern]
   where cPattern = Pweight 0 0 0.001 0
 
+test_patterns_1 :: IO ()
 test_patterns_1 = do
-    matches <- findPatternsInBlock numberOfPeople block_size (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns)
+    matches <- findPatternsInBlock numberOfPeople (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns)
     assertEqual matches expected
-  where numberOfBases = 100
-        numberOfPeople = 10000
-        block_size = 100
+  where numberOfPeople = 1000 :: Int
+
         inputData :: [(Vector CChar, Vector CInt)]
         inputData =  [(inputDataSample0, inputDataPositions), (inputDataSample1, inputDataPositions)] ++ (take (numberOfPeople - 2) (repeat (inputDataSample2, inputDataPositions)))
 
@@ -39,7 +39,7 @@ test_patterns_1 = do
         inputDataPositions = V.fromList $ take (V.length inputDataSample0) [0..]
 
         patterns = [pattern_CG, pattern_cCGA, pattern_CGA] ++ take 50 (repeat pattern_cccccccccc) ++ [pattern_CG]
-        
+
         expected = [Match {mPatternId = 53, mScore = 1000, mPosition = 0, mSampleId = 1}
                    ,Match {mPatternId = 2,  mScore = 1000, mPosition = 0, mSampleId = 1}
                    ,Match {mPatternId = 0,  mScore = 1000, mPosition = 0, mSampleId = 1}
@@ -48,12 +48,13 @@ test_patterns_1 = do
                    ,Match {mPatternId = 0,  mScore = 1000, mPosition = 4, mSampleId = 0}
                    ,Match {mPatternId = 1,  mScore = 961,  mPosition = 3, mSampleId = 0}]
 
+-- Check that the Matches contain the reference position, not the real position
+test_patterns_2 :: IO ()
 test_patterns_2 = do
-    matches <- findPatternsInBlock numberOfPeople block_size (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns)
+    matches <- findPatternsInBlock numberOfPeople (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns)
     assertEqual matches expected
-  where numberOfBases = 100
-        numberOfPeople = 10000
-        block_size = 100
+  where numberOfPeople = 1000 :: Int
+
         inputData :: [(Vector CChar, Vector CInt)]
         inputData =  [(inputDataSample0, inputDataPositions), (inputDataSample1, V.map (+7) inputDataPositions)] ++ (take (numberOfPeople - 2) (repeat (inputDataSample2, inputDataPositions)))
 
@@ -61,7 +62,7 @@ test_patterns_2 = do
         inputDataPositions = V.fromList $ take (V.length inputDataSample0) [10..]
 
         patterns = [pattern_CG, pattern_cCGA, pattern_CGA] ++ take 50 (repeat pattern_cccccccccc) ++ [pattern_CG]
-        
+
         expected = [Match {mPatternId = 53, mScore = 1000, mPosition = 10 + 7, mSampleId = 1}
                    ,Match {mPatternId = 2,  mScore = 1000, mPosition = 10 + 7, mSampleId = 1}
                    ,Match {mPatternId = 0,  mScore = 1000, mPosition = 10 + 7, mSampleId = 1}
@@ -70,18 +71,40 @@ test_patterns_2 = do
                    ,Match {mPatternId = 0,  mScore = 1000, mPosition = 14, mSampleId = 0}
                    ,Match {mPatternId = 1,  mScore = 961,  mPosition = 13, mSampleId = 0}]
 
-myReverse :: [a] -> [a]
-myReverse []     = []
-myReverse [x]    = [x]
-myReverse (x:xs) = myReverse xs ++ [x]
+-- Check that the end of the chromosome is padded with N
+test_patterns_padding :: IO ()
+test_patterns_padding = do
+    matches <- findPatternsInBlock numberOfPeople (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns)
+    assertEqual matches expected
+  where numberOfPeople = 1000 :: Int
 
-test_nonEmpty = do assertEqual [1] (myReverse [1])
-                   assertEqual [3,2,1] (myReverse [1,2,3])
+        inputData :: [(Vector CChar, Vector CInt)]
+        inputData =  [(V.take 5 inputDataSample0, V.take 5 inputDataPositions), (inputDataSample1, inputDataPositions)] ++ (take (numberOfPeople - 2) (repeat (V.take 10 inputDataSample2, V.take 10 inputDataPositions)))
 
-test_empty = assertEqual ([] :: [Int]) (myReverse [])
+        inputDataPositions :: Vector CInt
+        inputDataPositions = V.fromList $ take (V.length inputDataSample0) [10..]
 
-prop_reverse :: [Int] -> Bool
-prop_reverse xs = xs == (myReverse (myReverse xs))
+        patterns = [pattern_CG, pattern_cCGA, pattern_CGA] ++ take 50 (repeat pattern_cccccccccc) ++ [pattern_CG]
+
+        expected = [Match{mPatternId = 53, mScore = 1000, mPosition = 10, mSampleId = 1},
+                    Match{mPatternId = 2,  mScore = 1000, mPosition = 10, mSampleId = 1},
+                    Match{mPatternId = 0,  mScore = 1000, mPosition = 10, mSampleId = 1},
+                    Match{mPatternId = 53, mScore = 500,  mPosition = 14, mSampleId = 0},
+                    Match{mPatternId = 2,  mScore = 500,  mPosition = 14, mSampleId = 0},
+                    Match{mPatternId = 0,  mScore = 500,  mPosition = 14, mSampleId = 0}]
+
+--myReverse :: [a] -> [a]
+--myReverse []     = []
+--myReverse [x]    = [x]
+--myReverse (x:xs) = myReverse xs ++ [x]
+--
+--test_nonEmpty = do assertEqual [1] (myReverse [1])
+--                   assertEqual [3,2,1] (myReverse [1,2,3])
+--
+--test_empty = assertEqual ([] :: [Int]) (myReverse [])
+--
+--prop_reverse :: [Int] -> Bool
+--prop_reverse xs = xs == (myReverse (myReverse xs))
 
 main :: IO ()
 main = htfMain htf_thisModulesTests

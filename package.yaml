@@ -23,7 +23,6 @@ dependencies:
 
 ghc-options:
   - -Wall
-  - -Werror
   - -Wincomplete-uni-patterns
   - -Wincomplete-record-updates
 
@@ -31,6 +30,7 @@ _exe-ghc-options: &exe-ghc-options
   - -threaded
   - -rtsopts
   - -with-rtsopts=-N
+  - -Werror
 
 executables:
   01-hello-world:

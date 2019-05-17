@@ -28,7 +28,7 @@ pattern_cccccccccc = [cPattern, cPattern, cPattern, cPattern, cPattern, cPattern
 
 test_patterns_1 :: IO ()
 test_patterns_1 = do
-    matches <- findPatternsInBlock numberOfPeople (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns)
+    matches <- findPatternsInBlock (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns)
     assertEqual matches expected
   where numberOfPeople = 1000 :: Int
 
@@ -51,7 +51,7 @@ test_patterns_1 = do
 -- Check that the Matches contain the reference position, not the real position
 test_patterns_2 :: IO ()
 test_patterns_2 = do
-    matches <- findPatternsInBlock numberOfPeople (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns)
+    matches <- findPatternsInBlock (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns)
     assertEqual matches expected
   where numberOfPeople = 1000 :: Int
 
@@ -74,7 +74,7 @@ test_patterns_2 = do
 -- Check that the end of the chromosome is padded with N
 test_patterns_padding :: IO ()
 test_patterns_padding = do
-    matches <- findPatternsInBlock numberOfPeople (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns)
+    matches <- findPatternsInBlock (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns)
     assertEqual matches expected
   where numberOfPeople = 1000 :: Int
 

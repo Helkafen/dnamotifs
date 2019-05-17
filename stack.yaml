@@ -1,6 +1,1 @@
 resolver: lts-10.3
-packages:
-- .
-extra-deps:
-- OpenCL-1.0.3.4
-- lib/CLUtil

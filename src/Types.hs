@@ -15,7 +15,8 @@ data Match = Match {
     mPatternId :: Int, -- 0 based
     mScore :: Int,     -- 0 - 1000
     mPosition :: Int,  -- 0 based
-    mSampleId :: Int
+    mSampleId :: Int,
+    mMatched :: [Nucleotide]
 } deriving (Eq, Show)
 
 type Nucleotide = CChar

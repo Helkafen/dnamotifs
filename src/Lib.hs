@@ -10,6 +10,7 @@ import qualified Language.C.Inline               as C
 import           Data.Vector.Storable            (Vector)
 import qualified Data.Vector.Storable            as V
 import           Data.Monoid                     ((<>))
+import           Data.Maybe                      (mapMaybe)
 
 import Types
 
@@ -20,12 +21,15 @@ data NucleotideAndPositionBlock = NucleotideAndPositionBlock Int Int (Vector Nuc
 
 
 vectorToMatches :: Vector CInt -> [Match]
-vectorToMatches v = map toMatch (list4uple $ V.toList v)
-    where toMatch (p,s,pos,sam) = Match (fromIntegral p) (fromIntegral s) (fromIntegral pos) (fromIntegral sam)
+vectorToMatches v = mapMaybe toMatch (list4uple $ V.toList v)
+    where toMatch (p:s:pos:sam:matchedSequence) = Just $ Match (fromIntegral p) (fromIntegral s) (fromIntegral pos) (fromIntegral sam) (map fromIntegral matchedSequence)
+          toMatch [] = Nothing
+          toMatch x = error ("bla " ++ show (length x))
 
-list4uple :: [a] -> [(a,a,a,a)]
-list4uple (x1:x2:x3:x4:xs) = (x1,x2,x3,x4):(list4uple xs)
-list4uple _ = []
+list4uple :: [a] -> [[a]]
+list4uple [] = []
+list4uple xs = let (x,rest) = splitAt 34 xs in x:(list4uple rest)
+
 
 patternToVector :: Pattern -> Vector CInt
 patternToVector p = V.fromList [fromIntegral $ length p, sum (map (floor . (*1000) . m) p)] <> mconcat (map step p)
@@ -59,6 +63,7 @@ find_patterns sample_size block_size vec pos pat res_size = [C.block| int* {
         int pattern;
         int sample;
         int position;
+        char matched[30];
         struct Match* next;
     } Match;
 
@@ -67,6 +72,7 @@ find_patterns sample_size block_size vec pos pat res_size = [C.block| int* {
         int pattern;
         int sample;
         int position;
+        char matched[30];
     } MatchRecord;
 
     int sample_size = $(int sample_size);
@@ -121,6 +127,9 @@ find_patterns sample_size block_size vec pos pat res_size = [C.block| int* {
                     match->pattern = pattern_id;
                     match->sample = sample;
                     match->position = positions[i];
+                    for(int k = 0; k<29; k++) {
+                        match->matched[k] = in[i + k];
+                    } match->matched[29] = 0;
                     if(match_head == 0) {
                         match_head = match;
                         match->next = 0;
@@ -145,6 +154,12 @@ find_patterns sample_size block_size vec pos pat res_size = [C.block| int* {
         matches[n*4+1] = p->score;
         matches[n*4+2] = p->position;
         matches[n*4+3] = p->sample;
+        
+        int k = 0;
+        for(; k<29; k++) {
+            matches[n*4+4+k] = p->matched[k];
+        } matches[n*4+4+k+1] = 0;
+        
         Match* to_be_freed = p;
         p = p->next;
         free(to_be_freed);

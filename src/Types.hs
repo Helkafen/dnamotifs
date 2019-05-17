@@ -1,12 +1,12 @@
 module Types where
 
-import           Foreign.C.Types                 (CFloat, CChar)
+import           Foreign.C.Types                 (CChar, CInt)
 
 data Pweight = Pweight {
-    wa :: CFloat,
-    wc :: CFloat,
-    wg :: CFloat,
-    wt :: CFloat
+    wa :: Float,
+    wc :: Float,
+    wg :: Float,
+    wt :: Float
 } deriving (Show)
 
 type Pattern = [Pweight]
@@ -25,3 +25,5 @@ a = 1
 c = 2
 g = 3
 t = 4
+
+type Position = CInt

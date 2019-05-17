@@ -1,17 +1,16 @@
-name:                opencl-examples
+name:                dnamotifs
 version:             0.1.0.0
-github:              "lancelet/opencl-examples"
 license:             BSD3
-author:              "Jonathan Merritt"
-maintainer:          "j.s.merritt@gmail.com"
-copyright:           "2017 Jonathan Merritt"
+author:              "Sébastian Méric de Bellefon"
+maintainer:          "arnaudpourseb@gmail.com"
+copyright:           "Sébastian Méric de Bellefon"
 
 extra-source-files:
 - README.md
 - ChangeLog.md
 
-synopsis:            Examples using the Haskell OpenCL package
-description:         Please see the README on Github at <https://github.com/lancelet/opencl-examples#readme>
+synopsis:            Find motifs in DNA sequences using the Jaccard distance
+description:         Find motifs in DNA sequences using the Jaccard distance
 
 dependencies:
 - base >= 4.7 && < 5
@@ -24,7 +23,7 @@ dependencies:
 
 ghc-options:
   - -Wall
-#  - -Werror
+  - -Werror
   - -Wincomplete-uni-patterns
   - -Wincomplete-record-updates
 

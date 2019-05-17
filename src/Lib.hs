@@ -1,7 +1,7 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-module Lib ( findPatternsInBlock, mkPatterns, mkNucleotideBlock ) where
+module Lib ( findPatternsInBlock, mkPatterns, mkNucleotideAndPositionBlock ) where
 
 import           Foreign                         (Ptr, alloca, peek, FunPtr) 
 import           Foreign.ForeignPtr              (newForeignPtr)
@@ -14,8 +14,7 @@ import           Data.Monoid                     ((<>))
 import Types
 
 newtype Patterns = Patterns (Vector CInt)
-newtype NucleotideBlock = NucleotideBlock (Vector CChar)
-newtype PositionBlock = PositionBlock (Vector CInt)
+data NucleotideAndPositionBlock = NucleotideAndPositionBlock (Vector Nucleotide) (Vector Position)
 
 vectorToMatches :: Vector CInt -> [Match]
 vectorToMatches v = map toMatch (list4uple $ V.toList v)
@@ -31,8 +30,8 @@ patternToVector p = V.fromList [fromIntegral $ length p, sum (map (floor . (*100
     step x = V.map (floor . (*1000)) (V.fromList [0, wa x, wc x, wg x, wt x, m x]) -- 0 For "N"
     m x = maximum [wa x, wc x, wg x, wt x]
 
-mkNucleotideBlock :: [(Vector CChar, Vector CInt)] -> (NucleotideBlock, PositionBlock)
-mkNucleotideBlock xs = (NucleotideBlock (mconcat $ map fst xs), PositionBlock (mconcat $ map snd xs))  -- TODO fill with N if sizes are different
+mkNucleotideAndPositionBlock :: [(Vector Nucleotide, Vector CInt)] -> NucleotideAndPositionBlock
+mkNucleotideAndPositionBlock xs = NucleotideAndPositionBlock (mconcat $ map fst xs) (mconcat $ map snd xs)  -- TODO fill with N if sizes are different
 
 
 mkPatterns :: [Pattern] -> Patterns
@@ -151,8 +150,8 @@ find_patterns sample_size block_size vec pos pat res_size = [C.block| int* {
     } |]
 
 
-findPatternsInBlock :: Integral a => a -> a -> (NucleotideBlock, PositionBlock) -> Patterns -> IO [Match]
-findPatternsInBlock numberOfPeople block_size (NucleotideBlock inputData, PositionBlock positionData) (Patterns patternData) = do
+findPatternsInBlock :: Integral a => a -> a -> NucleotideAndPositionBlock -> Patterns -> IO [Match]
+findPatternsInBlock numberOfPeople block_size (NucleotideAndPositionBlock inputData positionData) (Patterns patternData) = do
     result <- alloca $ \n_ptr -> do
         x <- find_patterns (fromIntegral numberOfPeople) (fromIntegral block_size) inputData positionData patternData (n_ptr :: Ptr CInt)
         result_size <- peek n_ptr

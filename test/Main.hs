@@ -27,7 +27,7 @@ pattern_cccccccccc = [cPattern, cPattern, cPattern, cPattern, cPattern, cPattern
   where cPattern = Pweight 0 0 0.001 0
 
 test_patterns_1 = do
-    matches <- findPatternsInBlock numberOfPeople block_size (mkNucleotideBlock inputData) (mkPatterns patterns)
+    matches <- findPatternsInBlock numberOfPeople block_size (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns)
     assertEqual matches expected
   where numberOfBases = 100
         numberOfPeople = 10000
@@ -49,7 +49,7 @@ test_patterns_1 = do
                    ,Match {mPatternId = 1,  mScore = 961,  mPosition = 3, mSampleId = 0}]
 
 test_patterns_2 = do
-    matches <- findPatternsInBlock numberOfPeople block_size (mkNucleotideBlock inputData) (mkPatterns patterns)
+    matches <- findPatternsInBlock numberOfPeople block_size (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns)
     assertEqual matches expected
   where numberOfBases = 100
         numberOfPeople = 10000

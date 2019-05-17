@@ -41,7 +41,6 @@ import Data.Monoid ((<>))
 import Data.Maybe (mapMaybe)
 import Text.RawString.QQ
 import qualified Data.Bits as Bits
-import qualified Data.Vector as BoxedVec
 import qualified Language.C.Inline as C
 
 
@@ -125,21 +124,30 @@ repeatIOAction n action = do
 inputData :: Vector CChar
 inputData = mconcat $ [inputDataSample0, inputDataSample1] <> (take (numberOfPeople - 2) $ repeat inputDataSample2)
 
-numberOfPeople = 10000
+numberOfPeople = 100000
 
 
 --inputDataNoMatch :: Vector CChar
 --inputDataNoMatch = mconcat (take 100000 $ repeat inputDataSample2)
 
+type Nucleotide = CChar
+n = 0 :: Nucleotide
+a = 1 :: Nucleotide
+c = 2 :: Nucleotide
+g = 3 :: Nucleotide
+t = 4 :: Nucleotide
+
+
+
 -- Must be 100 bases long
 inputDataSample0 :: Vector CChar
-inputDataSample0 = V.fromList [0,0,0,0,1,2,0] <> V.fromList (take 93 (repeat 0)) -- AAAACGA
+inputDataSample0 = V.fromList [a,a,a,a,c,g,a] <> V.fromList (take 93 (repeat a))
 
 inputDataSample1 :: Vector CChar
-inputDataSample1 = V.fromList [1,2,0,0,0,0,0] <> V.fromList (take 93 (repeat 0)) -- CGAAAAA
+inputDataSample1 = V.fromList [c,g,a,a,a,a,a] <> V.fromList (take 93 (repeat a)) 
 
 inputDataSample2 :: Vector CChar
-inputDataSample2 = V.fromList [0,0,0,0,0,0,0] <> V.fromList (take 93 (repeat 0)) -- AAAAAAA
+inputDataSample2 = V.fromList [a,a,a,a,a,a,a] <> V.fromList (take 93 (repeat a))
 
 inputDataPositions :: Vector CInt
 inputDataPositions = V.fromList (mconcat $ take numberOfPeople $ repeat p)
@@ -196,7 +204,7 @@ nBytesMatches = nElem * sizeOf (undefined :: Int32)
 patternToVector :: Pattern -> Vector CInt
 patternToVector p = V.fromList [fromIntegral $ length p, sum (map (floor . (*1000) . max) p)] <> mconcat (map step p)
   where
-    step x = V.map (floor . (*1000)) (V.fromList [wa x, wc x, wg x, wt x, max x])
+    step x = V.map (floor . (*1000)) (V.fromList [0, wa x, wc x, wg x, wt x, max x]) -- 0 For "N"
     max x = maximum [wa x, wc x, wg x, wt x]
 
 patternsToVector :: [Pattern] -> Vector CInt
@@ -314,14 +322,14 @@ find_patterns sample_size block_size vec pat res_size = [C.block| int* {
                 const int max_index = bound1 < pattern_length ? bound1 : pattern_length;
             
                 // Hotspot loop
-                for (j = 0; j < max_index; k = k + 5, j++) {
-                    score_inter += patterns[k + in[i + j]]; // TODO manage the "N" case as well
+                for (j = 0; j < max_index; k = k + 6, j++) {
+                    score_inter += patterns[k + in[i + j]];
                 }
 
                 // Move to the next pattern anyway if j was restricted by the size of the block
                 if(bound1 == max_index) {
-                    k -= j*5;
-                    k += pattern_length*5;
+                    k -= j*6;
+                    k += pattern_length*6;
                 }
 
                 int score = (1000 * score_inter) / score_union;
@@ -397,6 +405,7 @@ main = do
     print $ round $ (t2 - t1) * 1000
     let a = vectorToMatches (result :: Vector CInt)
     print a
+    print (a == [Match {mPatternId = 53, mScore = 1000, mPosition = 0, mSampleId = 1},Match {mPatternId = 2, mScore = 1000, mPosition = 0, mSampleId = 1},Match {mPatternId = 0, mScore = 1000, mPosition = 0, mSampleId = 1},Match {mPatternId = 53, mScore = 1000, mPosition = 4, mSampleId = 0},Match {mPatternId = 2, mScore = 1000, mPosition = 4, mSampleId = 0},Match {mPatternId = 0, mScore = 1000, mPosition = 4, mSampleId = 0},Match {mPatternId = 1, mScore = 961, mPosition = 3, mSampleId = 0}])
     --print $ patternToVector [Pweight 0 0.1 0 0, Pweight 0 1 0 0, Pweight 0 0 1 0, Pweight 0.5 0 0 0]
     
 

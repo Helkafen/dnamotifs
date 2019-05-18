@@ -3,7 +3,7 @@ module Main where
 --import           Data.Time.Clock.POSIX (getPOSIXTime)
 -- import Types
 
-
+main :: IO()
 main = do
     print "Hello world"
     --t1 <- getPOSIXTime

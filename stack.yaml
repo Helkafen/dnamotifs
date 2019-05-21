@@ -1,1 +1,2 @@
 resolver: lts-13.21
+extra-deps: []

@@ -2,13 +2,13 @@
 
 import Test.Framework
 
-import           Foreign.C.Types                 (CInt, CChar)
+import           Foreign.C.Types                 (CChar)
 import           Data.Vector.Storable            (Vector)
 import qualified Data.Vector.Storable            as V
 import           Data.Monoid                     ((<>))
 
 import Types
-import Lib
+import PatternFind
 
 inputDataSample0 :: Vector CChar
 inputDataSample0 = V.fromList [a,a,a,a,c,g,a] <> V.fromList (replicate 93 a)
@@ -30,10 +30,10 @@ test_patterns_basic :: IO ()
 test_patterns_basic = do
     matches <- findPatternsInBlock (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns)
     assertEqual expected matches
-  where inputData :: [(Vector CChar, Vector CInt)]
+  where inputData :: [(Vector CChar, Vector Position)]
         inputData =  [(inputDataSample0, inputDataPositions)]
 
-        inputDataPositions :: Vector CInt
+        inputDataPositions :: Vector Position
         inputDataPositions = V.fromList $ take (V.length inputDataSample0) [0..]
 
         patterns = [pattern_CG]
@@ -44,11 +44,11 @@ test_patterns_basic2 :: IO ()
 test_patterns_basic2 = do
     matches <- findPatternsInBlock (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns)
     assertEqual expected matches
-  where inputData :: [(Vector CChar, Vector CInt)]
+  where inputData :: [(Vector CChar, Vector Position)]
         inputData =  [(inputDataSample0, inputDataPositions)]
 
-        inputDataPositions :: Vector CInt
-        inputDataPositions = V.fromList $ take (V.length inputDataSample0) [0..]
+        inputDataPositions :: Vector Position
+        inputDataPositions = V.fromList $ take (V.length inputDataSample0) (map Position [0..])
 
         patterns = [pattern_CG, pattern_cCGA]
 
@@ -61,11 +61,11 @@ test_patterns_1 = do
     assertEqual expected matches
   where numberOfPeople = 1000 :: Int
 
-        inputData :: [(Vector CChar, Vector CInt)]
+        inputData :: [(Vector CChar, Vector Position)]
         inputData =  [(inputDataSample0, inputDataPositions), (inputDataSample1, inputDataPositions)] ++ replicate (numberOfPeople - 2) (inputDataSample2, inputDataPositions)
 
-        inputDataPositions :: Vector CInt
-        inputDataPositions = V.fromList $ take (V.length inputDataSample0) [0..]
+        inputDataPositions :: Vector Position
+        inputDataPositions = V.fromList $ take (V.length inputDataSample0) (map Position [0..])
 
         patterns = [pattern_CG, pattern_cCGA, pattern_CGA] ++ replicate 50 pattern_cccccccccc ++ [pattern_CG]
 
@@ -84,11 +84,11 @@ test_patterns_2 = do
     assertEqual expected matches
   where numberOfPeople = 1000 :: Int
 
-        inputData :: [(Vector CChar, Vector CInt)]
+        inputData :: [(Vector CChar, Vector Position)]
         inputData =  [(inputDataSample0, inputDataPositions), (inputDataSample1, V.map (+7) inputDataPositions)] ++ replicate (numberOfPeople - 2) (inputDataSample2, inputDataPositions)
 
-        inputDataPositions :: Vector CInt
-        inputDataPositions = V.fromList $ take (V.length inputDataSample0) [10..]
+        inputDataPositions :: Vector Position
+        inputDataPositions = V.fromList $ take (V.length inputDataSample0) (map Position [10..])
 
         patterns = [pattern_CG, pattern_cCGA, pattern_CGA] ++ replicate 50 pattern_cccccccccc ++ [pattern_CG]
 
@@ -107,11 +107,11 @@ test_patterns_padding = do
     assertEqual expected matches
   where numberOfPeople = 1000 :: Int
 
-        inputData :: [(Vector CChar, Vector CInt)]
+        inputData :: [(Vector CChar, Vector Position)]
         inputData =  [(V.take 5 inputDataSample0, V.take 5 inputDataPositions), (inputDataSample1, inputDataPositions)] ++ (take (numberOfPeople - 2) (repeat (V.take 10 inputDataSample2, V.take 10 inputDataPositions)))
 
-        inputDataPositions :: Vector CInt
-        inputDataPositions = V.fromList $ take (V.length inputDataSample0) [10..]
+        inputDataPositions :: Vector Position
+        inputDataPositions = V.fromList $ take (V.length inputDataSample0) (map Position [10..])
 
         patterns = [pattern_CG, pattern_cCGA, pattern_CGA] ++ replicate 50 pattern_cccccccccc ++ [pattern_CG]
 

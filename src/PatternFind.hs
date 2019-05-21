@@ -1,7 +1,7 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-module Lib ( findPatternsInBlock, mkPatterns, mkNucleotideAndPositionBlock ) where
+module PatternFind ( findPatternsInBlock, mkPatterns, mkNucleotideAndPositionBlock ) where
 
 import           Foreign                         (Ptr, alloca, peek, FunPtr) 
 import           Foreign.ForeignPtr              (newForeignPtr)
@@ -17,7 +17,7 @@ import Types
 newtype Patterns = Patterns (Vector CInt)
 
 -- numberOfPeople, blockSize, nucleotides, positions
-data NucleotideAndPositionBlock = NucleotideAndPositionBlock Int Int (Vector Nucleotide) (Vector Position)
+data NucleotideAndPositionBlock = NucleotideAndPositionBlock Int Int (Vector Nucleotide) (Vector CInt)
 
 
 vectorToMatches :: Vector CInt -> [Match]
@@ -45,9 +45,10 @@ pad e len v = v <> padding
 -- Pad with nucleotide N if sizes are different
 mkNucleotideAndPositionBlock :: [(Vector Nucleotide, Vector Position)] -> NucleotideAndPositionBlock
 mkNucleotideAndPositionBlock [] = NucleotideAndPositionBlock 0 0 V.empty V.empty
-mkNucleotideAndPositionBlock xs = NucleotideAndPositionBlock numberOfPeople max_length (mconcat $ map (pad n max_length . fst) xs) (mconcat $ map (pad 0 max_length . snd) xs)
+mkNucleotideAndPositionBlock xs = NucleotideAndPositionBlock numberOfPeople max_length (mconcat $ map (pad n max_length . fst) xs) (mconcat $ map (pad 0 max_length . V.map unPos . snd) xs)
     where numberOfPeople = length xs
           max_length = maximum (map (V.length . fst) xs)
+          unPos (Position p) = fromIntegral p :: CInt
 
 
 mkPatterns :: [Pattern] -> Patterns

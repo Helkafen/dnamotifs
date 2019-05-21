@@ -1,12 +1,12 @@
 module Main where
 
-import           Foreign.C.Types                 (CInt, CChar)
+import           Foreign.C.Types                 (CChar)
 import           Data.Vector.Storable            (Vector)
 import qualified Data.Vector.Storable            as V
 import           Data.Monoid                     ((<>))
 import           Data.Time.Clock.POSIX (getPOSIXTime)
 import Types
-import Lib
+import PatternFind
 
 inputDataSample0 :: Vector CChar
 inputDataSample0 = V.fromList [a,a,a,a,c,g,a] <> V.fromList (take 93 (repeat a))
@@ -30,11 +30,11 @@ bench = do
     print (expected == matches)
   where numberOfPeople = 10000 :: Int
 
-        inputData :: [(Vector CChar, Vector CInt)]
+        inputData :: [(Vector CChar, Vector Position)]
         inputData =  [(inputDataSample0, inputDataPositions), (inputDataSample1, inputDataPositions)] ++ (take (numberOfPeople - 2) (repeat (inputDataSample2, inputDataPositions)))
 
-        inputDataPositions :: Vector CInt
-        inputDataPositions = V.fromList $ take (V.length inputDataSample0) [0..]
+        inputDataPositions :: Vector Position
+        inputDataPositions = V.fromList $ take (V.length inputDataSample0) (map Position [0..])
 
         patterns = [pattern_CG, pattern_cCGA, pattern_CGA] ++ replicate 50 pattern_cccccccccc ++ [pattern_CG]
 

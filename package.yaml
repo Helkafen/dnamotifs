@@ -20,6 +20,11 @@ dependencies:
 - time
 - raw-strings-qq
 - inline-c
+- attoparsec
+- text
+- bytestring
+- zlib
+- either
 
 ghc-options:
   - -Wall

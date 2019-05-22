@@ -11,13 +11,14 @@ import           Data.Vector.Storable            (Vector)
 import qualified Data.Vector.Storable            as V
 import           Data.Monoid                     ((<>))
 import           Data.Maybe                      (mapMaybe)
+--import           Data.Word                       (Word8)
 
 import Types
 
 newtype Patterns = Patterns (Vector CInt)
 
 -- numberOfPeople, blockSize, nucleotides, positions
-data NucleotideAndPositionBlock = NucleotideAndPositionBlock Int Int (Vector Nucleotide) (Vector CInt)
+data NucleotideAndPositionBlock = NucleotideAndPositionBlock Int Int (Vector CChar) (Vector CInt)
 
 
 vectorToMatches :: Vector CInt -> [Match]
@@ -45,7 +46,7 @@ pad e len v = v <> padding
 -- Pad with nucleotide N if sizes are different
 mkNucleotideAndPositionBlock :: [(Vector Nucleotide, Vector Position)] -> NucleotideAndPositionBlock
 mkNucleotideAndPositionBlock [] = NucleotideAndPositionBlock 0 0 V.empty V.empty
-mkNucleotideAndPositionBlock xs = NucleotideAndPositionBlock numberOfPeople max_length (mconcat $ map (pad n max_length . fst) xs) (mconcat $ map (pad 0 max_length . V.map unPos . snd) xs)
+mkNucleotideAndPositionBlock xs = NucleotideAndPositionBlock numberOfPeople max_length (V.map fromIntegral $ mconcat $ map (pad n max_length . fst) xs) (mconcat $ map (pad 0 max_length . V.map unPos . snd) xs)
     where numberOfPeople = length xs
           max_length = maximum (map (V.length . fst) xs)
           unPos (Position p) = fromIntegral p :: CInt

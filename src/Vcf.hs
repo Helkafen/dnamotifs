@@ -10,9 +10,11 @@ import qualified Data.ByteString.Lazy as B
 import           Data.Text.Lazy.Encoding (decodeUtf8With)
 import           Data.Text.Encoding.Error (ignore)
 import           Data.Either.Combinators (mapLeft)
+import           Data.Char (ord)
 
 import           Data.Attoparsec.Text
 import qualified Data.Text as T
+import qualified Data.Vector.Unboxed as U
 import qualified Data.Vector as V
 import           Control.Monad (guard)
 import           Data.Functor (($>))
@@ -65,13 +67,13 @@ variantIdParser = choice [none, rs] <?> "variant_name"
 variantParser :: V.Vector SampleId -> Parser Variant
 variantParser sampleIdentifiers = do
     chr <- chromosomeParser <* tab
-    pos <- Position <$> decimal <* tab
+    pos <- (Position . (\x -> x - 1)) <$> decimal <* tab
     name <- variantIdParser <* tab
-    ref <- (BaseSequence . T.pack)<$> many1 letter <* tab
-    alt <- (BaseSequence . T.pack) <$> many1 letter <* tab
+    ref <- (U.fromList . map (fromIntegral . ord)) <$> many1 letter <* tab
+    alt <- (U.fromList . map (fromIntegral . ord))  <$> many1 letter <* tab
     skipField >> skipField >> skipField >> skipField
     geno <- V.fromList <$> genoParser `sepBy` char '\t'
-    guard $ length geno == length sampleIdentifiers
+    guard $ V.length geno == V.length sampleIdentifiers
     return $ Variant chr pos name ref alt geno sampleIdentifiers
   where
     skipField = skipWhile (/= '\t') >> skip (== '\t')

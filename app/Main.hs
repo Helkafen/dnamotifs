@@ -1,6 +1,5 @@
 module Main where
 
-import           Foreign.C.Types                 (CChar)
 import           Data.Vector.Storable            (Vector)
 import qualified Data.Vector.Storable            as V
 import           Data.Monoid                     ((<>))
@@ -8,14 +7,14 @@ import           Data.Time.Clock.POSIX (getPOSIXTime)
 import Types
 import PatternFind
 
-inputDataSample0 :: Vector CChar
-inputDataSample0 = V.fromList [a,a,a,a,c,g,a] <> V.fromList (take 93 (repeat a))
+inputDataSample0 :: Vector Nucleotide
+inputDataSample0 = V.fromList [a,a,a,a,c,g,a] <> V.fromList (replicate 93 a)
 
-inputDataSample1 :: Vector CChar
-inputDataSample1 = V.fromList [c,g,a,a,a,a,a] <> V.fromList (take 93 (repeat a)) 
+inputDataSample1 :: Vector Nucleotide
+inputDataSample1 = V.fromList [c,g,a,a,a,a,a] <> V.fromList (replicate 93 a) 
 
-inputDataSample2 :: Vector CChar
-inputDataSample2 = V.fromList [a,a,a,a,a,a,a] <> V.fromList (take 93 (repeat a))
+inputDataSample2 :: Vector Nucleotide
+inputDataSample2 = V.fromList [a,a,a,a,a,a,a] <> V.fromList (replicate 93 a)
 
 pattern_CG, pattern_cCGA, pattern_CGA, pattern_cccccccccc :: [Pweight]
 pattern_CG = [Pweight 0 1 0 0, Pweight 0 0 1 0]
@@ -30,7 +29,7 @@ bench = do
     print (expected == matches)
   where numberOfPeople = 10000 :: Int
 
-        inputData :: [(Vector CChar, Vector Position)]
+        inputData :: [(Vector Nucleotide, Vector Position)]
         inputData =  [(inputDataSample0, inputDataPositions), (inputDataSample1, inputDataPositions)] ++ (take (numberOfPeople - 2) (repeat (inputDataSample2, inputDataPositions)))
 
         inputDataPositions :: Vector Position

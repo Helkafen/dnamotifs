@@ -25,6 +25,8 @@ dependencies:
 - bytestring
 - zlib
 - either
+- dlist
+- bytestring-to-vector
 
 ghc-options:
   - -Wall
@@ -35,7 +37,7 @@ _exe-ghc-options: &exe-ghc-options
   - -threaded
   - -rtsopts
   - -with-rtsopts=-N
-  - -Werror
+ # - -Werror
 
 executables:
   01-hello-world:

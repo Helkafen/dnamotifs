@@ -34,7 +34,6 @@ c = 2
 g = 3
 t = 4
 
-
 newtype Chromosome = Chromosome Text
   deriving (Eq, Show)
 

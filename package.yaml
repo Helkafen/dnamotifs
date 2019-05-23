@@ -27,6 +27,7 @@ dependencies:
 - either
 - dlist
 - bytestring-to-vector
+- split
 
 ghc-options:
   - -Wall
@@ -39,20 +40,28 @@ _exe-ghc-options: &exe-ghc-options
   - -with-rtsopts=-N
  # - -Werror
 
+library:
+    source-dirs:
+      - app
+      - src
+    ghc-options:
+      - -Wall
+  
 executables:
   01-hello-world:
     main:        Main.hs
     source-dirs:
       - app
-      - src
     ghc-options: *exe-ghc-options
+    dependencies:
+      - dnamotifs
 
 tests:
   cmodule-test:
     main: Main.hs
     source-dirs:
       - test
-      - src
     dependencies:
       - QuickCheck
       - HTF
+      - dnamotifs

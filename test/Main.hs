@@ -200,4 +200,4 @@ test_apply_variant_14 = do
 
 main :: IO ()
 main = 
-  htfMain htf_thisModulesTests
+  htfMainWithArgs ["--quiet"] htf_thisModulesTests

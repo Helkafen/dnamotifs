@@ -1,7 +1,7 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-module PatternFind ( findPatternsInBlock, mkPatterns, mkNucleotideAndPositionBlock ) where
+module PatternFind ( findPatternsInBlock, mkPatterns, mkNucleotideAndPositionBlock, NucleotideAndPositionBlock, Patterns ) where
 
 import           Foreign                         (Ptr, alloca, peek, FunPtr) 
 import           Foreign.ForeignPtr              (newForeignPtr)

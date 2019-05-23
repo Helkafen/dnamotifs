@@ -10,6 +10,7 @@ import qualified Data.Vector.Unboxed as U
 import           Data.List (elemIndex)
 import           Control.Monad (forM_)
 import           Data.List.Split (divvy)
+import           System.IO (appendFile)
 --
 import Types
 import Fasta (loadFasta)
@@ -18,8 +19,8 @@ import PatternFind (findPatternsInBlock, mkPatterns, mkNucleotideAndPositionBloc
 
 -- Inclusive [Start, End] interval
 applyVariants :: V.Vector Nucleotide -> Position -> Position -> [Diff] -> [(Nucleotide, Position)]
-applyVariants referenceGenome (Position start) (Position end) diffs = 
-    DList.toList $ go start (filter (\(Diff (Position p) _ _) -> p >= start && p <= end) diffs)
+applyVariants referenceGenome (Position start) (Position end) allDiffs =
+    DList.toList $ go start (filter (\(Diff (Position p) _ _) -> p >= start && p <= end) allDiffs)
   where go refPosition [] = takeRef refPosition end
         go refPosition diffs@(Diff (Position pos) ref alt:vs)
             | pos > refPosition = takeRef refPosition (pos-1) <> go pos diffs
@@ -46,12 +47,12 @@ data Haplotype = HaploLeft | HaploRight
 variantsToDiffs :: Haplotype -> [Variant] -> SampleId -> [Diff]
 variantsToDiffs _ [] _ = []
 variantsToDiffs haplo variants@(f:_) sample = 
-    let g = case haplo of
-                 HaploLeft -> [Geno10, Geno11]
-                 HaploRight -> [Geno01, Geno11]
+    let ge = case haplo of
+                  HaploLeft -> [Geno10, Geno11]
+                  HaploRight -> [Geno01, Geno11]
     in case elemIndex sample (toList $ sampleIds f) of
             Nothing -> []
-            Just i -> [Diff (position v) (reference v) (alternative v) | v <- variants, (!) (genotypes v) i `elem` g ]
+            Just i -> [Diff (position v) (reference v) (alternative v) | v <- variants, (!) (genotypes v) i `elem` ge ]
 
 overlappingchunksOf :: Int -> Int -> [(Nucleotide,Position)] -> [(V.Vector Nucleotide, V.Vector Position)]
 overlappingchunksOf window overlap xs = map toVec (divvy window (window - overlap) xs)
@@ -65,9 +66,9 @@ findPatterns chr referenceGenomeFile vcfFile resultFile = do
     patterns <- loadPatterns ""
     vcf <- readVcfWithGenotypes vcfFile
     case vcf of
-        Left error -> print error >> return False
-        Right [] -> print "No variant loaded" >> return False
-        Right variants@(x:xs) -> do
+        Left err -> print err >> return False
+        Right [] -> print ("No variant loaded" :: String) >> return False
+        Right variants@(x:_) -> do
             let samples = toList (sampleIds x) :: [SampleId]
             forM_ peaks $ \(peakStart, peakEnd) -> do
                 let diffs = map (variantsToDiffs HaploLeft variants <> variantsToDiffs HaploRight variants) samples :: [[Diff]]
@@ -76,6 +77,7 @@ findPatterns chr referenceGenomeFile vcfFile resultFile = do
                 forM_ blocks $ \block -> do
                     matches <- findPatternsInBlock block patterns
                     print matches
+                    appendFile resultFile (show matches)
                 -- overlappingchunksOf 100 10 . 
                 undefined --patched = map (applyVariants referenceGenome peakStart peakEnd variants) [0..length samples]
             return True

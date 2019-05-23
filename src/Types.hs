@@ -26,6 +26,7 @@ data Match = Match {
     mMatched :: [Nucleotide]
 } deriving (Eq, Show)
 
+-- They need to keep theses values, because the C function uses them as memory offsets in a table
 type Nucleotide = Word8
 n, a, c, g, t :: Nucleotide
 n = 0
@@ -33,6 +34,7 @@ a = 1
 c = 2
 g = 3
 t = 4
+
 
 newtype Chromosome = Chromosome Text
   deriving (Eq, Show)
@@ -64,4 +66,4 @@ data Diff = Diff Position BaseSequence BaseSequence -- pos, ref, alt
   deriving (Eq, Show)
 
 data Error = ParsingError Text | MissingFile FilePath | NoVariantFound FilePath
-  deriving (Show)
+  deriving (Eq, Show)

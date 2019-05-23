@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Main where
 
 import           Data.Vector.Storable            (Vector)
@@ -6,6 +7,7 @@ import           Data.Monoid                     ((<>))
 import           Data.Time.Clock.POSIX (getPOSIXTime)
 import Types
 import PatternFind
+import Lib (findPatterns)
 
 inputDataSample0 :: Vector Nucleotide
 inputDataSample0 = V.fromList [a,a,a,a,c,g,a] <> V.fromList (replicate 93 a)
@@ -49,7 +51,8 @@ main :: IO()
 main = do
     print "Hello world"
     t1 <- getPOSIXTime
-    bench
+    --bench
+    _ <- findPatterns (Chromosome "1") "/media/seb/TERA/lab/hg38.fa" "/home/seb/masters/topmed/exome_modified_header_100000_chr_100s.vcf.gz" "resultFile.tab"
     t2 <- getPOSIXTime
     print (round $ (t2 - t1) * 1000 :: Integer) -- milliseconds
     pure ()

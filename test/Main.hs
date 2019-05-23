@@ -1,4 +1,5 @@
 {-# OPTIONS_GHC -F -pgmF htfpp #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 import Test.Framework
 
@@ -6,11 +7,13 @@ import Test.Framework
 import           Data.Vector.Storable            (Vector)
 import qualified Data.Vector.Storable            as V
 import qualified Data.Vector.Unboxed             as U
+import qualified Data.Vector.Generic             as G
 import           Data.Monoid                     ((<>))
 
 import Types
 import PatternFind
 import Lib
+import Vcf (parseVariant)
 
 inputDataSample0 :: Vector Nucleotide
 inputDataSample0 = V.fromList [a,a,a,a,c,g,a] <> V.fromList (replicate 93 a)
@@ -124,79 +127,87 @@ test_patterns_padding = do
                     Match{mPatternId = 2,  mScore = 500,  mPosition = 14, mSampleId = 0, mMatched = [c]},
                     Match{mPatternId = 0,  mScore = 500,  mPosition = 14, mSampleId = 0, mMatched = [c]}]
 
+refGenome :: Vector Nucleotide
+refGenome = V.fromList [65,67,71,84] -- ACGT
 
 -- applyVariants :: V.Vector Nucleotide -> Position -> Position -> [Variant] -> [(Nucleotide, Position)]
 -- applyVariants referenceGenome (Position start) (Position end) variants = 
 test_apply_variant_1 :: IO ()
 test_apply_variant_1 = do
-  let patched = applyVariants (V.fromList [a,c,g,t]) (Position 1) (Position 2) []
+  let patched = applyVariants refGenome (Position 1) (Position 2) []
   assertEqual [(c, Position 1), (g, Position 2)] patched
 
 test_apply_variant_2 :: IO ()
 test_apply_variant_2 = do
-  let patched = applyVariants (V.fromList [a,c,g,t]) (Position 0) (Position 2) []
+  let patched = applyVariants refGenome (Position 0) (Position 2) []
   assertEqual [(a, Position 0), (c, Position 1), (g, Position 2)] patched
 
 test_apply_variant_3 :: IO ()
 test_apply_variant_3 = do
-  let patched = applyVariants (V.fromList [a,c,g,t]) (Position 0) (Position 5) []
+  let patched = applyVariants refGenome (Position 0) (Position 5) []
   assertEqual [(a, Position 0), (c, Position 1), (g, Position 2), (t, Position 3)] patched
 
 test_apply_variant_4 :: IO ()
 test_apply_variant_4 = do
-  let patched = applyVariants (V.fromList [a,c,g,t]) (Position 1) (Position 2) [Diff 100 (U.fromList [a]) (U.fromList [c])]
+  let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 100 (U.fromList [a]) (U.fromList [c])]
   assertEqual [(c, Position 1), (g, Position 2)] patched
 ----prop_reverse :: [Int] -> Bool
 ----prop_reverse xs = xs == (myReverse (myReverse xs))
 test_apply_variant_5 :: IO ()
 test_apply_variant_5 = do
-  let patched = applyVariants (V.fromList [a,c,g,t]) (Position 1) (Position 2) [Diff 1 (U.fromList [c]) (U.fromList [n])]
+  let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 1 (U.fromList [c]) (U.fromList [n])]
   assertEqual [(n, Position 1), (g, Position 2)] patched
 
 test_apply_variant_6 :: IO ()
 test_apply_variant_6 = do
-  let patched = applyVariants (V.fromList [a,c,g,t]) (Position 1) (Position 2) [Diff 2 (U.fromList [g]) (U.fromList [a])]
+  let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 2 (U.fromList [g]) (U.fromList [a])]
   assertEqual [(c, Position 1), (a, Position 2)] patched
 
 test_apply_variant_7 :: IO ()
 test_apply_variant_7 = do
-  let patched = applyVariants (V.fromList [a,c,g,t]) (Position 1) (Position 2) [Diff 1 (U.fromList [c]) (U.fromList [n]), Diff 2 (U.fromList [g]) (U.fromList [a])]
+  let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 1 (U.fromList [c]) (U.fromList [n]), Diff 2 (U.fromList [g]) (U.fromList [a])]
   assertEqual [(n, Position 1), (a, Position 2)] patched
 
 test_apply_variant_8 :: IO ()
 test_apply_variant_8 = do
-  let patched = applyVariants (V.fromList [a,c,g,t]) (Position 1) (Position 2) [Diff 0 (U.fromList [c]) (U.fromList [n]), Diff 4 (U.fromList [g]) (U.fromList [a])]
+  let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 0 (U.fromList [c]) (U.fromList [n]), Diff 4 (U.fromList [g]) (U.fromList [a])]
   assertEqual [(c, Position 1), (g, Position 2)] patched
 
 test_apply_variant_9 :: IO ()
 test_apply_variant_9 = do
-  let patched = applyVariants (V.fromList [a,c,g,t]) (Position 1) (Position 2) [Diff 1 (U.fromList [c]) (U.fromList [n,n])]
+  let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 1 (U.fromList [c]) (U.fromList [n,n])]
   assertEqual [(n, Position 1), (n, Position 1), (g, Position 2)] patched
 
 test_apply_variant_10 :: IO ()
 test_apply_variant_10 = do
-  let patched = applyVariants (V.fromList [a,c,g,t]) (Position 1) (Position 2) [Diff 2 (U.fromList [c]) (U.fromList [n,n])]
+  let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 2 (U.fromList [c]) (U.fromList [n,n])]
   assertEqual [(c, Position 1), (n, Position 2), (n, Position 2)] patched
 
 test_apply_variant_11 :: IO ()
 test_apply_variant_11 = do
-  let patched = applyVariants (V.fromList [a,c,g,t]) (Position 1) (Position 2) [Diff 3 (U.fromList [c]) (U.fromList [n,n])]
+  let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 3 (U.fromList [c]) (U.fromList [n,n])]
   assertEqual [(c, Position 1), (g, Position 2)] patched
 
 test_apply_variant_12 :: IO ()
 test_apply_variant_12 = do
-  let patched = applyVariants (V.fromList [a,c,g,t]) (Position 1) (Position 2) [Diff 1 (U.fromList [c, g]) (U.fromList [n])]
+  let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 1 (U.fromList [c, g]) (U.fromList [n])]
   assertEqual [(n, Position 1)] patched
 
 test_apply_variant_13 :: IO ()
 test_apply_variant_13 = do
-  let patched = applyVariants (V.fromList [a,c,g,t]) (Position 1) (Position 2) [Diff 2 (U.fromList [g, t]) (U.fromList [n])]
+  let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 2 (U.fromList [g, t]) (U.fromList [n])]
   assertEqual [(c, Position 1), (n, Position 2)] patched
 
 test_apply_variant_14 :: IO ()
 test_apply_variant_14 = do
-  let patched = applyVariants (V.fromList [a,c,g,t]) (Position 1) (Position 2) [Diff 0 (U.fromList [a, c, g]) (U.fromList [n, n])]
+  let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 0 (U.fromList [a, c, g]) (U.fromList [n, n])]
   assertEqual [(c, Position 1), (g, Position 2)] patched -- For simplicity, do not apply a Diff that starts before the window we're observing
+
+test_parse_1 :: IO ()
+test_parse_1 = do
+  let line = "chr1\t69081\t1:69081:G:C\tC\tG\t.\t.\t.\tGT\t1/1\t1/1"
+  let sampleIdentifiers = G.fromList [SampleId "sample1", SampleId "sample2"]
+  assertEqual (Right $ Variant (Chromosome "1") (Position 69080) (Just "1:69081:G:C") (G.fromList [c]) (G.fromList [g]) (G.fromList [Geno11, Geno11]) sampleIdentifiers) (parseVariant sampleIdentifiers line)
 
 main :: IO ()
 main = 

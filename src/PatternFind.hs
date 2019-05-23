@@ -1,7 +1,7 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-module PatternFind ( findPatternsInBlock, mkPatterns, mkNucleotideAndPositionBlock, NucleotideAndPositionBlock, Patterns ) where
+module PatternFind ( findPatternsInBlock, mkPatterns, mkNucleotideAndPositionBlock, NucleotideAndPositionBlock, Patterns, blockInfo ) where
 
 import           Foreign                         (Ptr, alloca, peek, FunPtr) 
 import           Foreign.ForeignPtr              (newForeignPtr)
@@ -20,6 +20,8 @@ newtype Patterns = Patterns (Vector CInt)
 -- numberOfPeople, blockSize, nucleotides, positions
 data NucleotideAndPositionBlock = NucleotideAndPositionBlock Int Int (Vector CChar) (Vector CInt)
 
+blockInfo :: NucleotideAndPositionBlock -> String
+blockInfo (NucleotideAndPositionBlock numberOfPeople blockSize nucleotides positions) = "block " <> (show numberOfPeople) <> " " <> show blockSize <> " " <> show (V.minimum positions) <> " " <> show (V.maximum positions)
 
 vectorToMatches :: Vector CInt -> [Match]
 vectorToMatches v = mapMaybe toMatch (list4uple $ V.toList v)

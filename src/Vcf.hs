@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Vcf (readVcfWithGenotypes) where
+module Vcf (readVcfWithGenotypes, parseVariant) where
 
 --import Protolude hiding (decodeUtf8With)
 import           Data.Text (Text)
@@ -19,6 +19,7 @@ import qualified Data.Vector as V
 import           Control.Monad (guard)
 import           Data.Functor (($>))
 import           Data.Either (rights)
+import Debug.Trace
 
 import Types
 
@@ -26,22 +27,23 @@ readGzippedLines :: FilePath -> IO [Text]
 readGzippedLines path = map TL.toStrict . TL.lines . decodeUtf8With ignore . GZip.decompress <$> B.readFile path
 
 readVcfWithGenotypes :: FilePath -> IO (Either Error [Variant])
-readVcfWithGenotypes path = (parseVcfContent . dropWhile ("##" `T.isPrefixOf`)) <$> readGzippedLines path
+readVcfWithGenotypes path = (parseVcfContent . dropWhile ("##" `T.isPrefixOf`)) <$> readGzippedLines (trace "path" path)
 
 sampleIdsInHeader :: Text -> V.Vector SampleId
 sampleIdsInHeader header = V.fromList $ map SampleId $ drop 9 (T.splitOn "\t" header)
 
 -- Hand tested
 parseVcfContent :: [Text] -> Either Error [Variant]
-parseVcfContent vcfLines = case vcfLines of
+parseVcfContent vcfLines = case (trace "vcfLines" vcfLines) of
     [] -> Left $ ParsingError "Empty vcf file"
-    (header:rest) -> pure $ rights $ map (parseVariant sampleIdentifiers) rest -- TODO: exception for a left
-        where sampleIdentifiers = sampleIdsInHeader header
+    (header:rest) -> pure $ rights $ map (parseVariant sampleIdentifiers) (trace (show (head rest) <> show sampleIdentifiers) rest) -- TODO: exception for a left
+        where sampleIdentifiers = (trace "hello" (sampleIdsInHeader header))
 
 
 chromosomeParser :: Parser Chromosome
 chromosomeParser = choice [autosomeParser, xParser, yParser]
     where autosomeParser = do
+            _ <- option "" (string "chr")
             d <- decimal
             guard $ d > 0 && d < 23
             pure (Chromosome $ T.pack $ show (d :: Integer))
@@ -69,8 +71,8 @@ variantParser sampleIdentifiers = do
     chr <- chromosomeParser <* tab
     pos <- (Position . (\x -> x - 1)) <$> decimal <* tab
     name <- variantIdParser <* tab
-    ref <- (U.fromList . map (fromIntegral . ord)) <$> many1 letter <* tab
-    alt <- (U.fromList . map (fromIntegral . ord))  <$> many1 letter <* tab
+    ref <- (U.fromList . map (toNuc . fromIntegral . ord)) <$> many1 letter <* tab
+    alt <- (U.fromList . map (toNuc . fromIntegral . ord))  <$> many1 letter <* tab
     skipField >> skipField >> skipField >> skipField
     geno <- V.fromList <$> genoParser `sepBy` char '\t'
     guard $ V.length geno == V.length sampleIdentifiers
@@ -81,3 +83,16 @@ variantParser sampleIdentifiers = do
 
 parseVariant :: V.Vector SampleId -> Text -> Either Error Variant
 parseVariant sampleIdentifiers s = mapLeft (ParsingError . (\e -> s <> " " <> T.pack e)) (parseOnly (variantParser sampleIdentifiers) s)
+
+toNuc :: Nucleotide -> Nucleotide
+toNuc 65 = a
+toNuc 67 = c
+toNuc 71 = g
+toNuc 84 = t
+toNuc 78 = n
+toNuc 97 = a
+toNuc 99 = c
+toNuc 103 = g
+toNuc 116 = t
+toNuc 110 = n
+toNuc other = error $ "Bad nucleotide " <> show other

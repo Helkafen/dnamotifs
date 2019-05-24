@@ -18,21 +18,21 @@ import Fasta (loadFasta)
 import Vcf (readVcfWithGenotypes)
 import PatternFind (findPatternsInBlock, mkPatterns, mkNucleotideAndPositionBlock, NucleotideAndPositionBlock, Patterns, blockInfo)
 
-toNuc :: Nucleotide -> Nucleotide -- TODO ugly
-toNuc 65 = a
-toNuc 67 = c
-toNuc 71 = g
-toNuc 84 = t
-toNuc 78 = n
-toNuc 97 = a
-toNuc 99 = c
-toNuc 103 = g
-toNuc 116 = t
-toNuc 110 = n
-toNuc other = error $ "Bad nucleotide " <> show other
+toNuc :: AlphaNucleotide -> Nucleotide
+toNuc (AlphaNucleotide 65) = a
+toNuc (AlphaNucleotide 67) = c
+toNuc (AlphaNucleotide 71) = g
+toNuc (AlphaNucleotide 84) = t
+toNuc (AlphaNucleotide 78) = n
+toNuc (AlphaNucleotide 97) = a
+toNuc (AlphaNucleotide 99) = c
+toNuc (AlphaNucleotide 103) = g
+toNuc (AlphaNucleotide 116) = t
+toNuc (AlphaNucleotide 110) = n
+toNuc (AlphaNucleotide other) = error $ "Bad nucleotide " <> show other
 
 -- Inclusive [Start, End] interval
-applyVariants :: V.Vector Nucleotide -> Position ZeroBased -> Position ZeroBased -> [Diff ZeroBased] -> [(Nucleotide, Position ZeroBased)]
+applyVariants :: V.Vector AlphaNucleotide -> Position ZeroBased -> Position ZeroBased -> [Diff ZeroBased] -> [(Nucleotide, Position ZeroBased)]
 applyVariants referenceGenome (Position start) (Position end) allDiffs =
     DList.toList $ go start (filter (\(Diff (Position p) _ _) -> p >= start && p <= end) allDiffs)
   where go refPosition [] = takeRef referenceGenome refPosition end
@@ -44,7 +44,7 @@ applyVariants referenceGenome (Position start) (Position end) allDiffs =
             | refPosition >= end = takeRef referenceGenome refPosition end
             | otherwise = DList.empty
 
-takeRef :: V.Vector Nucleotide ->  Int -> Int -> DList.DList (Nucleotide, Position ZeroBased)
+takeRef :: V.Vector AlphaNucleotide ->  Int -> Int -> DList.DList (Nucleotide, Position ZeroBased)
 takeRef referenceGenome s e = DList.fromList $ zip (V.toList $ V.map toNuc $ V.take (e-s+1) (V.drop s referenceGenome)) (map Position [s..e+1])
 
 
@@ -74,8 +74,6 @@ overlappingchunksOf window overlap xs = map toVec (divvy window (window - overla
         where toVec :: [(Nucleotide, Position a)] -> (V.Vector Nucleotide, V.Vector (Position a))
               toVec np = (V.fromList (map fst np), V.fromList (map snd np))
 
-
---vectorsOfSample referenceGenome peakStart peakEnd haplo variants = overlappingchunksOf 100 10 . applyVariants referenceGenome peakStart peakEnd . variantsToDiffs haplo variants
 
 findPatterns :: Chromosome -> FilePath -> FilePath -> FilePath -> IO Bool
 findPatterns chr referenceGenomeFile vcfFile resultFile = do

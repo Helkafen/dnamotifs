@@ -21,7 +21,7 @@ newtype Patterns = Patterns (Vector CInt)
 data NucleotideAndPositionBlock = NucleotideAndPositionBlock Int Int (Vector CChar) (Vector CInt)
 
 blockInfo :: NucleotideAndPositionBlock -> String
-blockInfo (NucleotideAndPositionBlock numberOfPeople blockSize nucleotides positions) = "block " <> (show numberOfPeople) <> " " <> show blockSize <> " " <> show (V.minimum positions) <> " " <> show (V.maximum positions)
+blockInfo (NucleotideAndPositionBlock numberOfPeople blockSize _ positions) = "block " <> show numberOfPeople <> " " <> show blockSize <> " " <> show (V.minimum positions) <> " " <> show (V.maximum positions)
 
 vectorToMatches :: Vector CInt -> [Match]
 vectorToMatches v = mapMaybe toMatch (list4uple $ V.toList v)

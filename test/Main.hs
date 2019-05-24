@@ -128,7 +128,7 @@ test_patterns_padding = do
                     Match{mPatternId = 2,  mScore = 500,  mPosition = 14, mSampleId = 0, mMatched = [c]},
                     Match{mPatternId = 0,  mScore = 500,  mPosition = 14, mSampleId = 0, mMatched = [c]}]
 
-refGenome :: Vector Nucleotide
+refGenome :: Vector AlphaNucleotide
 refGenome = V.fromList [65,67,71,84] -- ACGT
 
 -- applyVariants :: V.Vector Nucleotide -> Position -> Position -> [Variant] -> [(Nucleotide, Position)]

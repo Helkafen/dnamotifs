@@ -13,7 +13,7 @@ import Types
 
 
 -- Hand tested
-loadFasta :: Chromosome -> FilePath -> IO (V.Vector Nucleotide)
+loadFasta :: Chromosome -> FilePath -> IO (V.Vector AlphaNucleotide)
 loadFasta (Chromosome chr) filename = (byteStringToVector . B.toStrict . transform . go) <$> B.readFile filename
  where separator = fromIntegral (ord '>') :: Word8
        newLine = fromIntegral (ord '\n') :: Word8

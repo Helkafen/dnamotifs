@@ -34,6 +34,8 @@ a = 1
 c = 2
 g = 3
 t = 4
+newtype AlphaNucleotide = AlphaNucleotide Word8 -- ACGTacgtNn
+  deriving (Eq, Ord, Show, Num, Enum, Real, Integral, STO.Storable)
 
 
 newtype Chromosome = Chromosome Text

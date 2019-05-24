@@ -81,7 +81,7 @@ findPatterns chr referenceGenomeFile vcfFile resultFile = do
     referenceGenome <- loadFasta chr referenceGenomeFile
     peaks <- readPeaks chr ""
     patterns <- loadPatterns ""
-    vcf <- readVcfWithGenotypes vcfFile
+    vcf <- readVcfWithGenotypes vcfFile peaks
     case vcf of
         Left err -> print err >> return False
         Right [] -> print ("No variant loaded" :: String) >> return False

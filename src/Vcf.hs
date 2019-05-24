@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Vcf (readVcfWithGenotypes, parseVariant) where
+module Vcf (readVcfWithGenotypes, parseVariant, filterOrderedIntervals, parseVcfContent) where
 
 --import Protolude hiding (decodeUtf8With)
 import           Data.Text (Text)
@@ -18,7 +18,9 @@ import qualified Data.Vector.Unboxed as U
 import qualified Data.Vector as V
 import           Control.Monad (guard)
 import           Data.Functor (($>))
-import           Data.Either (rights)
+import           Data.Either (rights, fromRight)
+--import           Data.Maybe (fromMaybe)
+import qualified Data.DList as DList
 import Debug.Trace
 
 import Types
@@ -26,18 +28,30 @@ import Types
 readGzippedLines :: FilePath -> IO [Text]
 readGzippedLines path = map TL.toStrict . TL.lines . decodeUtf8With ignore . GZip.decompress <$> B.readFile path
 
-readVcfWithGenotypes :: FilePath -> IO (Either Error [Variant])
-readVcfWithGenotypes path = (parseVcfContent . dropWhile ("##" `T.isPrefixOf`)) <$> readGzippedLines (trace "path" path)
+
+filterOrderedIntervals :: Ord a => (b->a) -> [(a,a)] -> [b] -> [b]
+filterOrderedIntervals pos r xs = DList.toList (go r xs)
+    where go [] _ = DList.empty
+          go ((start,end):rs) l = 
+            let (vs, rest) =  span ((<=end) . pos) $ dropWhile ((<start) . pos) l
+            in DList.fromList vs <> go rs rest
+
+
+readVcfWithGenotypes :: FilePath -> [(Position, Position)] -> IO (Either Error [Variant])
+readVcfWithGenotypes path regions = (parseVcfContent regions . dropWhile ("##" `T.isPrefixOf`)) <$> readGzippedLines path
 
 sampleIdsInHeader :: Text -> V.Vector SampleId
 sampleIdsInHeader header = V.fromList $ map SampleId $ drop 9 (T.splitOn "\t" header)
 
 -- Hand tested
-parseVcfContent :: [Text] -> Either Error [Variant]
-parseVcfContent vcfLines = case (trace "vcfLines" vcfLines) of
+parseVcfContent :: [(Position, Position)] -> [Text] -> Either Error [Variant]
+parseVcfContent regions vcfLines = case vcfLines of
     [] -> Left $ ParsingError "Empty vcf file"
-    (header:rest) -> pure $ rights $ map (parseVariant sampleIdentifiers) (trace (show (head rest) <> show sampleIdentifiers) rest) -- TODO: exception for a left
-        where sampleIdentifiers = (trace "hello" (sampleIdsInHeader header))
+    (header:rest) -> pure $ rights $ map (parseVariant sampleIdentifiers) (filterOrderedIntervals pos regions rest) -- TODO: exception for a left
+        where sampleIdentifiers = sampleIdsInHeader header
+              pos :: T.Text -> Position
+              pos = Position . fromRight (error "Bad position in vcf") . parseInt . T.takeWhile (/='\t') . T.drop 1  . T.dropWhile (/='\t')
+              parseInt = parseOnly (signed decimal)
 
 
 chromosomeParser :: Parser Chromosome
@@ -53,10 +67,10 @@ chromosomeParser = choice [autosomeParser, xParser, yParser]
 genoParser :: Parser Genotype
 genoParser = choice [
     string "0/0" $> Geno00,
+    string "0|0" $> Geno00,
     string "0/1" $> Geno01,
     string "1/0" $> Geno10,
     string "1/1" $> Geno11,
-    string "0|0" $> Geno00,
     string "0|1" $> Geno01,
     string "1|0" $> Geno10,
     string "1|1" $> Geno11]

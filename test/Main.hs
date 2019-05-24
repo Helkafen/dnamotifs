@@ -9,11 +9,12 @@ import qualified Data.Vector.Storable            as V
 import qualified Data.Vector.Unboxed             as U
 import qualified Data.Vector.Generic             as G
 import           Data.Monoid                     ((<>))
+import qualified Data.Text                       as T
 
 import Types
 import PatternFind
 import Lib
-import Vcf (parseVariant)
+import Vcf (parseVariant, filterOrderedIntervals, parseVcfContent)
 
 inputDataSample0 :: Vector Nucleotide
 inputDataSample0 = V.fromList [a,a,a,a,c,g,a] <> V.fromList (replicate 93 a)
@@ -208,6 +209,27 @@ test_parse_1 = do
   let line = "chr1\t69081\t1:69081:G:C\tC\tG\t.\t.\t.\tGT\t1/1\t1/1"
   let sampleIdentifiers = G.fromList [SampleId "sample1", SampleId "sample2"]
   assertEqual (Right $ Variant (Chromosome "1") (Position 69080) (Just "1:69081:G:C") (G.fromList [c]) (G.fromList [g]) (G.fromList [Geno11, Geno11]) sampleIdentifiers) (parseVariant sampleIdentifiers line)
+
+test_filterOrderedIntervals_1 :: IO ()
+test_filterOrderedIntervals_1 = do
+  let inf = [10..]
+  let filtered = filterOrderedIntervals Position [(Position 15, Position 18), (Position 20, Position 23)] inf
+  assertEqual [15, 16, 17, 18, 20, 21, 22, 23] filtered
+
+test_parseVcfContent_1 :: IO ()
+test_parseVcfContent_1 = do
+  let vcf = ["#\t\t\t\t\t\t\t\t\tsample1\tsample2",
+             "chr1\t4\tname4\tC\tA\t\t\t\t\t0/0\t0/1",
+             "chr1\t5\tname5\tC\tA\t\t\t\t\t0/0\t0/1",
+             "chr1\t12\tname12\tC\tA\t\t\t\t\t0/0\t0/1",
+             "chr1\t15\tname15\tC\tA\t\t\t\t\t0/0\t0/1",
+             "chr1\t16\tname16\tC\tA\t\t\t\t\t0/0\t0/1",
+             "chr1\t21\tname21\tC\tA\t\t\t\t\t0/0\t0/1"
+            ] :: [T.Text]
+  let parsed = parseVcfContent [(Position 5, Position 15), (Position 18, Position 25)] vcf
+  let var p = Variant (Chromosome "1") (Position (p-1)) (Just $ "name" <> T.pack (show p)) (U.fromList [c]) (U.fromList [a]) (G.fromList [Geno00, Geno01]) (G.fromList [SampleId "sample1", SampleId "sample2"])
+  let expected = Right [var 5, var 12, var 15, var 21]
+  assertEqual expected parsed
 
 main :: IO ()
 main = 

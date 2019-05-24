@@ -36,10 +36,10 @@ test_patterns_basic :: IO ()
 test_patterns_basic = do
     matches <- findPatternsInBlock (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns)
     assertEqual expected matches
-  where inputData :: [(Vector Nucleotide, Vector Position)]
+  where inputData :: [(Vector Nucleotide, Vector (Position ZeroBased))]
         inputData =  [(inputDataSample0, inputDataPositions)]
 
-        inputDataPositions :: Vector Position
+        inputDataPositions :: Vector (Position ZeroBased)
         inputDataPositions = V.fromList $ take (V.length inputDataSample0) [0..]
 
         patterns = [pattern_CG]
@@ -50,10 +50,10 @@ test_patterns_basic2 :: IO ()
 test_patterns_basic2 = do
     matches <- findPatternsInBlock (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns)
     assertEqual expected matches
-  where inputData :: [(Vector Nucleotide, Vector Position)]
+  where inputData :: [(Vector Nucleotide, Vector (Position ZeroBased))]
         inputData =  [(inputDataSample0, inputDataPositions)]
 
-        inputDataPositions :: Vector Position
+        inputDataPositions :: Vector (Position ZeroBased)
         inputDataPositions = V.fromList $ take (V.length inputDataSample0) (map Position [0..])
 
         patterns = [pattern_CG, pattern_cCGA]
@@ -67,10 +67,10 @@ test_patterns_1 = do
     assertEqual expected matches
   where numberOfPeople = 1000 :: Int
 
-        inputData :: [(Vector Nucleotide, Vector Position)]
+        inputData :: [(Vector Nucleotide, Vector (Position ZeroBased))]
         inputData =  [(inputDataSample0, inputDataPositions), (inputDataSample1, inputDataPositions)] ++ replicate (numberOfPeople - 2) (inputDataSample2, inputDataPositions)
 
-        inputDataPositions :: Vector Position
+        inputDataPositions :: Vector (Position ZeroBased)
         inputDataPositions = V.fromList $ take (V.length inputDataSample0) (map Position [0..])
 
         patterns = [pattern_CG, pattern_cCGA, pattern_CGA] ++ replicate 50 pattern_cccccccccc ++ [pattern_CG]
@@ -90,10 +90,10 @@ test_patterns_2 = do
     assertEqual expected matches
   where numberOfPeople = 1000 :: Int
 
-        inputData :: [(Vector Nucleotide, Vector Position)]
+        inputData :: [(Vector Nucleotide, Vector (Position ZeroBased))]
         inputData =  [(inputDataSample0, inputDataPositions), (inputDataSample1, V.map (+7) inputDataPositions)] ++ replicate (numberOfPeople - 2) (inputDataSample2, inputDataPositions)
 
-        inputDataPositions :: Vector Position
+        inputDataPositions :: Vector (Position ZeroBased)
         inputDataPositions = V.fromList $ take (V.length inputDataSample0) (map Position [10..])
 
         patterns = [pattern_CG, pattern_cCGA, pattern_CGA] ++ replicate 50 pattern_cccccccccc ++ [pattern_CG]
@@ -113,10 +113,10 @@ test_patterns_padding = do
     assertEqual expected matches
   where numberOfPeople = 1000 :: Int
 
-        inputData :: [(Vector Nucleotide, Vector Position)]
+        inputData :: [(Vector Nucleotide, Vector (Position ZeroBased))]
         inputData =  [(V.take 5 inputDataSample0, V.take 5 inputDataPositions), (inputDataSample1, inputDataPositions)] ++ (take (numberOfPeople - 2) (repeat (V.take 10 inputDataSample2, V.take 10 inputDataPositions)))
 
-        inputDataPositions :: Vector Position
+        inputDataPositions :: Vector (Position ZeroBased)
         inputDataPositions = V.fromList $ take (V.length inputDataSample0) (map Position [10..])
 
         patterns = [pattern_CG, pattern_cCGA, pattern_CGA] ++ replicate 50 pattern_cccccccccc ++ [pattern_CG]
@@ -219,15 +219,15 @@ test_filterOrderedIntervals_1 = do
 test_parseVcfContent_1 :: IO ()
 test_parseVcfContent_1 = do
   let vcf = ["#\t\t\t\t\t\t\t\t\tsample1\tsample2",
-             "chr1\t4\tname4\tC\tA\t\t\t\t\t0/0\t0/1",
-             "chr1\t5\tname5\tC\tA\t\t\t\t\t0/0\t0/1",
-             "chr1\t12\tname12\tC\tA\t\t\t\t\t0/0\t0/1",
-             "chr1\t15\tname15\tC\tA\t\t\t\t\t0/0\t0/1",
-             "chr1\t16\tname16\tC\tA\t\t\t\t\t0/0\t0/1",
-             "chr1\t21\tname21\tC\tA\t\t\t\t\t0/0\t0/1"
+             "chr1\t5\tname4\tC\tA\t\t\t\t\t0/0\t0/1",
+             "chr1\t6\tname5\tC\tA\t\t\t\t\t0/0\t0/1",
+             "chr1\t13\tname12\tC\tA\t\t\t\t\t0/0\t0/1",
+             "chr1\t16\tname15\tC\tA\t\t\t\t\t0/0\t0/1",
+             "chr1\t18\tname17\tC\tA\t\t\t\t\t0/0\t0/1",
+             "chr1\t22\tname21\tC\tA\t\t\t\t\t0/0\t0/1"
             ] :: [T.Text]
   let parsed = parseVcfContent [(Position 5, Position 15), (Position 18, Position 25)] vcf
-  let var p = Variant (Chromosome "1") (Position (p-1)) (Just $ "name" <> T.pack (show p)) (U.fromList [c]) (U.fromList [a]) (G.fromList [Geno00, Geno01]) (G.fromList [SampleId "sample1", SampleId "sample2"])
+  let var p = Variant (Chromosome "1") (Position p) (Just $ "name" <> T.pack (show p)) (U.fromList [c]) (U.fromList [a]) (G.fromList [Geno00, Geno01]) (G.fromList [SampleId "sample1", SampleId "sample2"])
   let expected = Right [var 5, var 12, var 15, var 21]
   assertEqual expected parsed
 

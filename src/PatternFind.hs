@@ -46,7 +46,7 @@ pad e len v = v <> padding
     where padding = V.fromList $ replicate (len - V.length v) e
 
 -- Pad with nucleotide N if sizes are different
-mkNucleotideAndPositionBlock :: [(Vector Nucleotide, Vector Position)] -> NucleotideAndPositionBlock
+mkNucleotideAndPositionBlock :: [(Vector Nucleotide, Vector (Position ZeroBased))] -> NucleotideAndPositionBlock
 mkNucleotideAndPositionBlock [] = NucleotideAndPositionBlock 0 0 V.empty V.empty
 mkNucleotideAndPositionBlock xs = NucleotideAndPositionBlock numberOfPeople max_length (V.map fromIntegral $ mconcat $ map (pad n max_length . fst) xs) (mconcat $ map (pad 0 max_length . V.map unPos . snd) xs)
     where numberOfPeople = length xs

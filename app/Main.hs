@@ -31,10 +31,10 @@ bench = do
     print (expected == matches)
   where numberOfPeople = 10000 :: Int
 
-        inputData :: [(Vector Nucleotide, Vector Position)]
+        inputData :: [(Vector Nucleotide, Vector (Position ZeroBased))]
         inputData =  [(inputDataSample0, inputDataPositions), (inputDataSample1, inputDataPositions)] ++ (take (numberOfPeople - 2) (repeat (inputDataSample2, inputDataPositions)))
 
-        inputDataPositions :: Vector Position
+        inputDataPositions :: Vector (Position ZeroBased)
         inputDataPositions = V.fromList $ take (V.length inputDataSample0) (map Position [0..])
 
         patterns = [pattern_CG, pattern_cCGA, pattern_CGA] ++ replicate 50 pattern_cccccccccc ++ [pattern_CG]

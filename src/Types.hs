@@ -39,8 +39,14 @@ t = 4
 newtype Chromosome = Chromosome Text
   deriving (Eq, Show)
 
-newtype Position = Position Int
+data ZeroBased
+data OneBased
+
+newtype Position a = Position Int
   deriving (Eq, Ord, Show, Num, Enum, Real, Integral, STO.Storable)
+
+--toZeroBased :: Position OneBased -> Position ZeroBased
+--toZeroBased (Position p) = Position (p-1)
 
 data Genotype = Geno00 | Geno01 | Geno10 | Geno11
   deriving (Eq, Show)
@@ -52,9 +58,9 @@ newtype SampleId = SampleId Text
 type BaseSequence = U.Vector Nucleotide
 
 -- 0-based (not like in a VCF, which is 1-based)
-data Variant = Variant {
+data Variant a = Variant {
     chromosome :: Chromosome,
-    position :: Position,
+    position :: Position a,
     variantId :: Maybe Text,
     reference :: BaseSequence,
     alternative :: BaseSequence,
@@ -62,7 +68,7 @@ data Variant = Variant {
     sampleIds :: V.Vector SampleId
 } deriving (Eq, Show)
 
-data Diff = Diff Position BaseSequence BaseSequence -- pos, ref, alt
+data Diff a = Diff (Position a) BaseSequence BaseSequence -- pos, ref, alt
   deriving (Eq, Show)
 
 data Error = ParsingError Text | MissingFile FilePath | NoVariantFound FilePath

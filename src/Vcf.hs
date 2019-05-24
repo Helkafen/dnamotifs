@@ -37,20 +37,20 @@ filterOrderedIntervals pos r xs = DList.toList (go r xs)
             in DList.fromList vs <> go rs rest
 
 
-readVcfWithGenotypes :: FilePath -> [(Position, Position)] -> IO (Either Error [Variant])
+readVcfWithGenotypes :: FilePath -> [(Position ZeroBased, Position ZeroBased)] -> IO (Either Error [Variant ZeroBased])
 readVcfWithGenotypes path regions = (parseVcfContent regions . dropWhile ("##" `T.isPrefixOf`)) <$> readGzippedLines path
 
 sampleIdsInHeader :: Text -> V.Vector SampleId
 sampleIdsInHeader header = V.fromList $ map SampleId $ drop 9 (T.splitOn "\t" header)
 
 -- Hand tested
-parseVcfContent :: [(Position, Position)] -> [Text] -> Either Error [Variant]
+parseVcfContent :: [(Position ZeroBased, Position ZeroBased)] -> [Text] -> Either Error [Variant ZeroBased]
 parseVcfContent regions vcfLines = case vcfLines of
     [] -> Left $ ParsingError "Empty vcf file"
     (header:rest) -> pure $ rights $ map (parseVariant sampleIdentifiers) (filterOrderedIntervals pos regions rest) -- TODO: exception for a left
         where sampleIdentifiers = sampleIdsInHeader header
-              pos :: T.Text -> Position
-              pos = Position . fromRight (error "Bad position in vcf") . parseInt . T.takeWhile (/='\t') . T.drop 1  . T.dropWhile (/='\t')
+              pos :: T.Text -> Position ZeroBased
+              pos = Position . (\p -> p - 1) . fromRight (error "Bad position in vcf") . parseInt . T.takeWhile (/='\t') . T.drop 1  . T.dropWhile (/='\t')
               parseInt = parseOnly (signed decimal)
 
 
@@ -80,7 +80,7 @@ variantIdParser = choice [none, rs] <?> "variant_name"
     where rs = (Just . T.pack) <$> many1 (notChar '\t')
           none = char '.' $> Nothing
 
-variantParser :: V.Vector SampleId -> Parser Variant
+variantParser :: V.Vector SampleId -> Parser (Variant ZeroBased)
 variantParser sampleIdentifiers = do
     chr <- chromosomeParser <* tab
     pos <- (Position . (\x -> x - 1)) <$> decimal <* tab
@@ -95,7 +95,7 @@ variantParser sampleIdentifiers = do
     skipField = skipWhile (/= '\t') >> skip (== '\t')
     tab = skip (== '\t')
 
-parseVariant :: V.Vector SampleId -> Text -> Either Error Variant
+parseVariant :: V.Vector SampleId -> Text -> Either Error (Variant ZeroBased)
 parseVariant sampleIdentifiers s = mapLeft (ParsingError . (\e -> s <> " " <> T.pack e)) (parseOnly (variantParser sampleIdentifiers) s)
 
 toNuc :: Nucleotide -> Nucleotide

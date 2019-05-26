@@ -73,7 +73,7 @@ data Variant a = Variant {
 } deriving (Eq, Show)
 
 data Diff a = Diff (Position a) BaseSequence BaseSequence -- pos, ref, alt
-  deriving (Eq, Show)
+  deriving (Eq, Ord, Show)
 
 data Error = ParsingError Text | MissingFile FilePath | NoVariantFound FilePath
   deriving (Eq, Show)

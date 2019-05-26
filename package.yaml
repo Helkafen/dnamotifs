@@ -24,6 +24,7 @@ dependencies:
 - zlib
 - either
 - dlist
+- containers
 
 ghc-options:
   - -Wall

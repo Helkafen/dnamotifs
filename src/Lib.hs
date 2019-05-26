@@ -3,6 +3,7 @@
 
 module Lib where
 
+import qualified Data.Set as Set
 import qualified Data.Vector as V
 import qualified Data.Vector.Storable as STO
 import qualified Data.ByteString as B
@@ -66,6 +67,8 @@ findPatterns chr patterns peakFile referenceGenomeFile vcfFile resultFile = do
                     forM_ peaks $ \(peakStart, peakEnd) -> do
                         let variantsInPeak = takeWhile (\v -> position v <= peakEnd) $ dropWhile (\v -> position v < peakStart) variants
                         let diffs = V.map (variantsToDiffs HaploLeft variantsInPeak <> variantsToDiffs HaploRight variantsInPeak) sampleIndexesTwoHaplotypes
+                        let numberOfUniqueSequences = length (Set.fromList (V.toList diffs))
+                        print $ "Number of unique sequences :" ++ show numberOfUniqueSequences ++ "/" ++ show (V.length (sampleIds x))
                         let block = mkNucleotideAndPositionBlock $ map (applyVariants takeReferenceGenome peakStart peakEnd) (V.toList diffs)
                         print $ blockInfo block
                         matches <- findPatternsInBlock block patterns

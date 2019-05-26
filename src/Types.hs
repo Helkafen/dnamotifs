@@ -44,7 +44,7 @@ type BaseSequence = B.ByteString
 data BaseSequencePosition = BaseSequencePosition BaseSequence (STO.Vector CInt) -- TODO CInt16 for memory bandwidth
     deriving (Eq, Show)
 
-newtype Chromosome = Chromosome Text
+newtype Chromosome = Chromosome { unChr :: Text }
   deriving (Eq, Show)
 
 

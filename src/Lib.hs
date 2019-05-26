@@ -7,6 +7,8 @@ import qualified Data.Set as Set
 import qualified Data.Vector as V
 import qualified Data.Vector.Storable as STO
 import qualified Data.ByteString as B
+import qualified Data.Text as T
+import qualified Data.Text.IO as TIO
 import           Control.Monad (forM_)
 import           System.IO (appendFile)
 import           Debug.Trace (trace)
@@ -51,7 +53,8 @@ variantsToDiffs haplo variants i =
 
 findPatterns :: Chromosome -> Patterns -> FilePath -> FilePath -> FilePath -> FilePath -> IO Bool
 findPatterns chr patterns peakFile referenceGenomeFile vcfFile resultFile = do
-    takeReferenceGenome <- loadFasta chr referenceGenomeFile
+    (takeReferenceGenome, referenceGenomeSize) <- loadFasta chr referenceGenomeFile
+    TIO.putStrLn $ "Chromosome " <> unChr chr <> " : " <> T.pack (show referenceGenomeSize) <> " bases"
     --patterns <- loadPatterns ""
     bed <- readPeaks chr peakFile
     case bed of

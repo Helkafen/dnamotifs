@@ -1,51 +1,41 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Lib where
 
-import qualified Data.DList as DList
 import           Data.Vector ((!), toList)
-import qualified Data.Vector.Storable as V
-import qualified Data.Vector.Unboxed as U
---import qualified Data.Text as T
+import qualified Data.Vector.Storable as STO
+import qualified Data.ByteString as B
 import           Data.List (elemIndex)
 import           Control.Monad (forM_)
-import           Data.List.Split (divvy)
 import           System.IO (appendFile)
-import           Debug.Trace (trace, traceShow)
+import           Debug.Trace (trace)
 --
 import Types
 import Fasta (loadFasta)
 import Vcf (readVcfWithGenotypes)
-import PatternFind (findPatternsInBlock, mkPatterns, mkNucleotideAndPositionBlock, NucleotideAndPositionBlock, Patterns, blockInfo)
+import PatternFind (findPatternsInBlock, mkPatterns, mkNucleotideAndPositionBlock, Patterns, blockInfo)
 
-toNuc :: AlphaNucleotide -> Nucleotide
-toNuc (AlphaNucleotide 65) = a
-toNuc (AlphaNucleotide 67) = c
-toNuc (AlphaNucleotide 71) = g
-toNuc (AlphaNucleotide 84) = t
-toNuc (AlphaNucleotide 78) = n
-toNuc (AlphaNucleotide 97) = a
-toNuc (AlphaNucleotide 99) = c
-toNuc (AlphaNucleotide 103) = g
-toNuc (AlphaNucleotide 116) = t
-toNuc (AlphaNucleotide 110) = n
-toNuc (AlphaNucleotide other) = error $ "Bad nucleotide " <> show other
 
 -- Inclusive [Start, End] interval
-applyVariants :: V.Vector AlphaNucleotide -> Position ZeroBased -> Position ZeroBased -> [Diff ZeroBased] -> [(Nucleotide, Position ZeroBased)]
-applyVariants referenceGenome (Position start) (Position end) allDiffs =
-    DList.toList $ go start (filter (\(Diff (Position p) _ _) -> p >= start && p <= end) allDiffs)
-  where go refPosition [] = takeRef referenceGenome refPosition end
+applyVariants :: (Int -> Int -> BaseSequencePosition) -> Position ZeroBased -> Position ZeroBased -> [Diff ZeroBased] -> BaseSequencePosition
+applyVariants takeReferenceGenome (Position start) (Position end) allDiffs =
+    let chunks = go start (filter (\(Diff (Position p) _ _) -> p >= start && p <= end) allDiffs)
+    in BaseSequencePosition (B.concat (map seqOf chunks)) (STO.concat (map posOf chunks))
+  where go :: Int -> [Diff ZeroBased] -> [BaseSequencePosition]
+        go refPosition [] = [takeReferenceGenome refPosition end]
         go refPosition diffs@(Diff (Position pos) ref alt:vs)
-            | pos > refPosition = takeRef referenceGenome refPosition (pos-1) <> go pos diffs
-            | pos == refPosition && U.length ref == 1 = DList.fromList (zip (U.toList alt) (repeat (Position refPosition))) <> go (refPosition + 1) vs -- SNV, insertion
-            | pos == refPosition && U.length alt == 1 = DList.fromList (zip (U.toList alt) (repeat (Position refPosition))) <> go (refPosition + U.length ref) vs -- deletion
+            | pos > refPosition = takeReferenceGenome refPosition (pos-1): go pos diffs
+            | pos == refPosition && B.length ref == 1 = -- SNV, insertion
+                BaseSequencePosition alt (STO.replicate (B.length alt) (fromIntegral refPosition)): go (refPosition + 1) vs
+            | pos == refPosition && B.length alt == 1 = -- deletion
+                BaseSequencePosition alt (STO.singleton (fromIntegral refPosition)) : go (refPosition + B.length ref) vs
             | pos == refPosition = error "Missing case in applyVariants (we assume that ref or alt have length 1)"
-            | refPosition >= end = takeRef referenceGenome refPosition end
-            | otherwise = DList.empty
+            | refPosition >= end = [takeReferenceGenome refPosition end]
+            | otherwise = [BaseSequencePosition B.empty STO.empty]
+        seqOf (BaseSequencePosition nuc _) = nuc
+        posOf (BaseSequencePosition _ pos) = pos
 
-takeRef :: V.Vector AlphaNucleotide ->  Int -> Int -> DList.DList (Nucleotide, Position ZeroBased)
-takeRef referenceGenome s e = DList.fromList $ zip (V.toList $ V.map toNuc $ V.take (e-s+1) (V.drop s referenceGenome)) (map Position [s..e+1])
 
 
 --[(Vector Nucleotide, Vector Position)]
@@ -67,17 +57,11 @@ variantsToDiffs haplo variants@(f:_) sample =
                   HaploRight -> [Geno01, Geno11]
     in case elemIndex sample (toList $ sampleIds f) of
             Nothing -> []
-            Just i -> traceShow "onediff" [Diff (position v) (reference v) (alternative v) | v <- variants, (!) (genotypes v) i `elem` ge ]
-
-overlappingchunksOf :: Int -> Int -> [(Nucleotide,Position a)] -> [(V.Vector Nucleotide, V.Vector (Position a))]
-overlappingchunksOf window overlap xs = map toVec (divvy window (window - overlap) xs)
-        where toVec :: [(Nucleotide, Position a)] -> (V.Vector Nucleotide, V.Vector (Position a))
-              toVec np = (V.fromList (map fst np), V.fromList (map snd np))
-
+            Just i -> trace "onediff" [Diff (position v) (reference v) (alternative v) | v <- variants, (!) (genotypes v) i `elem` ge ]
 
 findPatterns :: Chromosome -> FilePath -> FilePath -> FilePath -> IO Bool
 findPatterns chr referenceGenomeFile vcfFile resultFile = do
-    referenceGenome <- loadFasta chr referenceGenomeFile
+    takeReferenceGenome <- loadFasta chr referenceGenomeFile
     peaks <- readPeaks chr ""
     patterns <- loadPatterns ""
     vcf <- readVcfWithGenotypes vcfFile peaks
@@ -88,37 +72,13 @@ findPatterns chr referenceGenomeFile vcfFile resultFile = do
             let samples = toList (sampleIds x) :: [SampleId]
             forM_ peaks $ \(peakStart, peakEnd) -> do
                 let variantsInPeak = takeWhile (\v -> position v <= peakEnd) $ dropWhile (\v -> position v < peakStart) variants
-                --let d = variantsToDiffs HaploLeft variants (head samples)
-                --let s = applyVariants referenceGenome peakStart peakEnd d :: [(Nucleotide, Position)]
-                --let cs = overlappingchunksOf 100 10 s :: [(V.Vector Nucleotide, V.Vector Position)]
-                --let bs = map mkNucleotideAndPositionBlock cs
-                --print (map (show . blockInfo) bs)
-                --vectorsOfSample
-
                 let diffs = map (variantsToDiffs HaploLeft variantsInPeak <> variantsToDiffs HaploRight variantsInPeak) samples :: [[Diff ZeroBased]]
-                let seqs = map (applyVariants referenceGenome peakStart peakEnd) diffs :: [[(Nucleotide, Position ZeroBased)]]
-                let chunks = map (overlappingchunksOf 100 10) seqs :: [[(V.Vector Nucleotide, V.Vector (Position ZeroBased))]]
-                --forM_ chunks $ \chunk -> do
-                --    print (chunk)
-                go chunks
-                --forM_ blocks $ \block -> do
-                --    print (blockInfo block)
-                    --matches <- findPatternsInBlock block patterns
-                    --print matches
-                    --appendFile resultFile (show matches)
-                -- overlappingchunksOf 100 10 . 
-                --undefined --patched = map (applyVariants referenceGenome peakStart peakEnd variants) [0..length samples]
+                let block = mkNucleotideAndPositionBlock $ map (applyVariants takeReferenceGenome peakStart peakEnd) diffs
+                print $ blockInfo block
+                matches <- findPatternsInBlock block patterns
+                print matches
+                appendFile resultFile (show matches)
             return True
-    where go :: [[(V.Vector Nucleotide, V.Vector (Position ZeroBased))]] -> IO ()
-          go ch = do
-            let heads = map (headOr (V.empty, V.empty)) ch
-            case all ((==0) . V.length . fst) heads of
-                False -> do
-                    let block = mkNucleotideAndPositionBlock heads
-                    print $ blockInfo block
-                    go (map tail ch)
-                True -> do
-                    print "End of peak"
 
 
 headOr :: a -> [a] -> a 

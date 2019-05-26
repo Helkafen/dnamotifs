@@ -6,7 +6,8 @@ module Vcf (readVcfWithGenotypes, parseVariant, filterOrderedIntervals, parseVcf
 import           Data.Text (Text)
 import qualified Data.Text.Lazy as TL
 import qualified Codec.Compression.GZip as GZip
-import qualified Data.ByteString.Lazy as B
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as BL
 import           Data.Text.Lazy.Encoding (decodeUtf8With)
 import           Data.Text.Encoding.Error (ignore)
 import           Data.Either.Combinators (mapLeft)
@@ -14,19 +15,16 @@ import           Data.Char (ord)
 
 import           Data.Attoparsec.Text
 import qualified Data.Text as T
-import qualified Data.Vector.Unboxed as U
 import qualified Data.Vector as V
 import           Control.Monad (guard)
 import           Data.Functor (($>))
 import           Data.Either (rights, fromRight)
---import           Data.Maybe (fromMaybe)
 import qualified Data.DList as DList
-import Debug.Trace
 
 import Types
 
 readGzippedLines :: FilePath -> IO [Text]
-readGzippedLines path = map TL.toStrict . TL.lines . decodeUtf8With ignore . GZip.decompress <$> B.readFile path
+readGzippedLines path = map TL.toStrict . TL.lines . decodeUtf8With ignore . GZip.decompress <$> BL.readFile path
 
 
 filterOrderedIntervals :: Ord a => (b->a) -> [(a,a)] -> [b] -> [b]
@@ -85,8 +83,8 @@ variantParser sampleIdentifiers = do
     chr <- chromosomeParser <* tab
     pos <- (Position . (\x -> x - 1)) <$> decimal <* tab
     name <- variantIdParser <* tab
-    ref <- (U.fromList . map (toNuc . AlphaNucleotide . fromIntegral . ord)) <$> many1 letter <* tab
-    alt <- (U.fromList . map (toNuc . AlphaNucleotide . fromIntegral . ord))  <$> many1 letter <* tab
+    ref <- (B.pack . map (toNuc . ord)) <$> many1 letter <* tab
+    alt <- (B.pack . map (toNuc . ord))  <$> many1 letter <* tab
     skipField >> skipField >> skipField >> skipField
     geno <- V.fromList <$> genoParser `sepBy` char '\t'
     guard $ V.length geno == V.length sampleIdentifiers
@@ -98,15 +96,15 @@ variantParser sampleIdentifiers = do
 parseVariant :: V.Vector SampleId -> Text -> Either Error (Variant ZeroBased)
 parseVariant sampleIdentifiers s = mapLeft (ParsingError . (\e -> s <> " " <> T.pack e)) (parseOnly (variantParser sampleIdentifiers) s)
 
-toNuc :: AlphaNucleotide -> Nucleotide
-toNuc (AlphaNucleotide 65) = a
-toNuc (AlphaNucleotide 67) = c
-toNuc (AlphaNucleotide 71) = g
-toNuc (AlphaNucleotide 84) = t
-toNuc (AlphaNucleotide 78) = n
-toNuc (AlphaNucleotide 97) = a
-toNuc (AlphaNucleotide 99) = c
-toNuc (AlphaNucleotide 103) = g
-toNuc (AlphaNucleotide 116) = t
-toNuc (AlphaNucleotide 110) = n
-toNuc (AlphaNucleotide other) = error $ "Bad nucleotide " <> show other
+toNuc :: Int -> Nucleotide
+toNuc 65 = a
+toNuc 67 = c
+toNuc 71 = g
+toNuc 84 = t
+toNuc 78 = n
+toNuc 97 = a
+toNuc 99 = c
+toNuc 103 = g
+toNuc 116 = t
+toNuc 110 = n
+toNuc other = error $ "Bad nucleotide " <> show other

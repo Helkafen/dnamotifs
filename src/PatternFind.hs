@@ -5,20 +5,21 @@ module PatternFind ( findPatternsInBlock, mkPatterns, mkNucleotideAndPositionBlo
 
 import           Foreign                         (Ptr, alloca, peek, FunPtr) 
 import           Foreign.ForeignPtr              (newForeignPtr)
-import           Foreign.C.Types                 (CInt, CChar)
+import           Foreign.C.Types                 (CInt)
 import qualified Language.C.Inline               as C
 import           Data.Vector.Storable            (Vector)
 import qualified Data.Vector.Storable            as V
+import qualified Data.ByteString                 as B
 import           Data.Monoid                     ((<>))
 import           Data.Maybe                      (mapMaybe)
---import           Data.Word                       (Word8)
+import           Data.Word                       (Word8)
 
 import Types
 
 newtype Patterns = Patterns (Vector CInt)
 
 -- numberOfPeople, blockSize, nucleotides, positions
-data NucleotideAndPositionBlock = NucleotideAndPositionBlock Int Int (Vector CChar) (Vector CInt)
+data NucleotideAndPositionBlock = NucleotideAndPositionBlock Int Int B.ByteString (Vector CInt)
 
 blockInfo :: NucleotideAndPositionBlock -> String
 blockInfo (NucleotideAndPositionBlock numberOfPeople blockSize _ positions) = "block " <> show numberOfPeople <> " " <> show blockSize <> " " <> show (V.minimum positions) <> " " <> show (V.maximum positions)
@@ -45,20 +46,24 @@ pad :: V.Storable a => a -> Int -> Vector a -> Vector a
 pad e len v = v <> padding
     where padding = V.fromList $ replicate (len - V.length v) e
 
+padBS :: Word8 -> Int -> B.ByteString -> B.ByteString
+padBS e len v = B.append v (B.replicate (len - B.length v) e)
+
 -- Pad with nucleotide N if sizes are different
-mkNucleotideAndPositionBlock :: [(Vector Nucleotide, Vector (Position ZeroBased))] -> NucleotideAndPositionBlock
-mkNucleotideAndPositionBlock [] = NucleotideAndPositionBlock 0 0 V.empty V.empty
-mkNucleotideAndPositionBlock xs = NucleotideAndPositionBlock numberOfPeople max_length (V.map fromIntegral $ mconcat $ map (pad n max_length . fst) xs) (mconcat $ map (pad 0 max_length . V.map unPos . snd) xs)
+mkNucleotideAndPositionBlock :: [BaseSequencePosition] -> NucleotideAndPositionBlock
+mkNucleotideAndPositionBlock [] = NucleotideAndPositionBlock 0 0 B.empty V.empty
+mkNucleotideAndPositionBlock xs = NucleotideAndPositionBlock numberOfPeople max_length (B.concat $ map (padBS n max_length . seqOf) xs) (mconcat $ map (pad 0 max_length . posOf) xs)
     where numberOfPeople = length xs
-          max_length = maximum (map (V.length . fst) xs)
-          unPos (Position p) = fromIntegral p :: CInt
+          max_length = maximum (map (B.length . seqOf) xs)
+          seqOf (BaseSequencePosition nuc _) = nuc
+          posOf (BaseSequencePosition _ pos) = pos
 
 
 mkPatterns :: [Pattern] -> Patterns
 mkPatterns patterns = Patterns $ mconcat (map patternToVector patterns) <> V.fromList [0]
 
 
-C.context (C.baseCtx <> C.vecCtx <> C.fptrCtx)
+C.context (C.baseCtx <> C.vecCtx <> C.fptrCtx <> C.bsCtx)
 C.include "<stdio.h>"
 C.include "<math.h>"
 C.include "<stdlib.h>"
@@ -66,7 +71,7 @@ C.include "<string.h>"
 
 foreign import ccall "&free" freePtr :: FunPtr (Ptr CInt-> IO ())
 
-findPatterns :: CInt -> CInt -> Vector CChar -> Vector CInt -> Vector CInt -> Ptr CInt -> IO (Ptr CInt)
+findPatterns :: CInt -> CInt -> B.ByteString -> Vector CInt -> Vector CInt -> Ptr CInt -> IO (Ptr CInt)
 findPatterns sample_size block_size vec pos pat res_size = [C.block| int* {
     typedef struct Match {
         int score;
@@ -88,7 +93,7 @@ findPatterns sample_size block_size vec pos pat res_size = [C.block| int* {
     int sample_size = $(int sample_size);
     int block_size = $(int block_size);
     int* patterns = $vec-ptr:(int *pat);
-    char* in = $vec-ptr:(char *vec);
+    char* in = &($bs-ptr:vec[0]);
     int* positions = $vec-ptr:(int *pos);
 
     Match *match_head = (Match*)0;

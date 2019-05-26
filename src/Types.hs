@@ -1,11 +1,13 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE BangPatterns #-}
 
 module Types where
 
 import           Data.Text (Text)
+import qualified Data.ByteString as B
 import qualified Data.Vector as V
 import qualified Data.Vector.Storable as STO
-import qualified Data.Vector.Unboxed as U
+import           Foreign.C.Types                 (CInt)
 import           Data.Word (Word8)
 
 
@@ -34,16 +36,19 @@ a = 1
 c = 2
 g = 3
 t = 4
-newtype AlphaNucleotide = AlphaNucleotide Word8 -- ACGTacgtNn
-  deriving (Eq, Ord, Show, Num, Enum, Real, Integral, STO.Storable)
 
+type BaseSequence = B.ByteString
+
+-- Base sequence + reference position
+data BaseSequencePosition = BaseSequencePosition BaseSequence (STO.Vector CInt) -- TODO CInt16 for memory bandwidth
+    deriving (Eq, Show)
 
 newtype Chromosome = Chromosome Text
   deriving (Eq, Show)
 
+
 data ZeroBased
 data OneBased
-
 newtype Position a = Position Int
   deriving (Eq, Ord, Show, Num, Enum, Real, Integral, STO.Storable)
 
@@ -57,7 +62,6 @@ data Genotype = Geno00 | Geno01 | Geno10 | Geno11
 newtype SampleId = SampleId Text
   deriving (Eq, Ord, Show)
 
-type BaseSequence = U.Vector Nucleotide
 
 -- 0-based (not like in a VCF, which is 1-based)
 data Variant a = Variant {

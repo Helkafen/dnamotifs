@@ -3,20 +3,22 @@ module Main where
 
 import           Data.Vector.Storable            (Vector)
 import qualified Data.Vector.Storable            as V
+import qualified Data.ByteString                 as B
 import           Data.Monoid                     ((<>))
 import           Data.Time.Clock.POSIX (getPOSIXTime)
+import           Foreign.C.Types                 (CInt)
 import Types
 import PatternFind
 import Lib (findPatterns)
 
-inputDataSample0 :: Vector Nucleotide
-inputDataSample0 = V.fromList [a,a,a,a,c,g,a] <> V.fromList (replicate 93 a)
+inputDataSample0 :: B.ByteString
+inputDataSample0 = B.pack [a,a,a,a,c,g,a] <> B.replicate 93 a
 
-inputDataSample1 :: Vector Nucleotide
-inputDataSample1 = V.fromList [c,g,a,a,a,a,a] <> V.fromList (replicate 93 a) 
+inputDataSample1 :: B.ByteString
+inputDataSample1 = B.pack [c,g,a,a,a,a,a] <> B.replicate 93 a
 
-inputDataSample2 :: Vector Nucleotide
-inputDataSample2 = V.fromList [a,a,a,a,a,a,a] <> V.fromList (replicate 93 a)
+inputDataSample2 :: B.ByteString
+inputDataSample2 = B.pack [a,a,a,a,a,a,a] <> B.replicate 93 a
 
 pattern_CG, pattern_cCGA, pattern_CGA, pattern_cccccccccc :: [Pweight]
 pattern_CG = [Pweight 0 1 0 0, Pweight 0 0 1 0]
@@ -31,11 +33,11 @@ bench = do
     print (expected == matches)
   where numberOfPeople = 10000 :: Int
 
-        inputData :: [(Vector Nucleotide, Vector (Position ZeroBased))]
-        inputData =  [(inputDataSample0, inputDataPositions), (inputDataSample1, inputDataPositions)] ++ (take (numberOfPeople - 2) (repeat (inputDataSample2, inputDataPositions)))
+        inputData :: [BaseSequencePosition]
+        inputData =  [BaseSequencePosition inputDataSample0 inputDataPositions, BaseSequencePosition inputDataSample1 inputDataPositions] ++ (replicate (numberOfPeople - 2) (BaseSequencePosition inputDataSample2 inputDataPositions))
 
-        inputDataPositions :: Vector (Position ZeroBased)
-        inputDataPositions = V.fromList $ take (V.length inputDataSample0) (map Position [0..])
+        inputDataPositions :: Vector CInt
+        inputDataPositions = V.fromList $ take (B.length inputDataSample0) [0..]
 
         patterns = [pattern_CG, pattern_cCGA, pattern_CGA] ++ replicate 50 pattern_cccccccccc ++ [pattern_CG]
 
@@ -49,7 +51,7 @@ bench = do
 
 main :: IO()
 main = do
-    print "Hello world"
+    print ("Hello world" :: String)
     t1 <- getPOSIXTime
     --bench
     _ <- findPatterns (Chromosome "1") "/media/seb/TERA/lab/hg38.fa" "/home/seb/masters/topmed/exome_modified_header_100000_chr_100s.vcf.gz" "resultFile.tab"

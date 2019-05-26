@@ -1,5 +1,4 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE BangPatterns #-}
 
 module Types where
 
@@ -10,6 +9,8 @@ import qualified Data.Vector.Storable as STO
 import           Foreign.C.Types                 (CInt)
 import           Data.Word (Word8)
 
+data Haplotype = HaploLeft | HaploRight
+    deriving (Eq)
 
 data Pweight = Pweight {
     wa :: Float,
@@ -51,9 +52,6 @@ data ZeroBased
 data OneBased
 newtype Position a = Position Int
   deriving (Eq, Ord, Show, Num, Enum, Real, Integral, STO.Storable)
-
---toZeroBased :: Position OneBased -> Position ZeroBased
---toZeroBased (Position p) = Position (p-1)
 
 data Genotype = Geno00 | Geno01 | Geno10 | Geno11
   deriving (Eq, Show)

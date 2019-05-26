@@ -3,14 +3,13 @@
 
 module Lib where
 
-import           Data.Vector ((!), toList)
+import qualified Data.Vector as V
 import qualified Data.Vector.Storable as STO
 import qualified Data.ByteString as B
-import           Data.List (elemIndex)
 import           Control.Monad (forM_)
 import           System.IO (appendFile)
 import           Debug.Trace (trace)
---
+
 import Types
 import Fasta (loadFasta)
 import Vcf (readVcfWithGenotypes)
@@ -38,26 +37,19 @@ applyVariants takeReferenceGenome (Position start) (Position end) allDiffs =
 
 
 
---[(Vector Nucleotide, Vector Position)]
---make :: 
 readPeaks :: Chromosome -> FilePath -> IO [(Position ZeroBased, Position ZeroBased)]
 readPeaks _ _ = return [(Position 1000, Position 1010000)]
 
 loadPatterns :: FilePath -> IO Patterns
 loadPatterns _ = return $ mkPatterns []
 
-data Haplotype = HaploLeft | HaploRight
-    deriving (Eq)
-
-variantsToDiffs :: Haplotype -> [Variant a] -> SampleId -> [Diff a]
+variantsToDiffs :: Haplotype -> [Variant a] -> Int -> [Diff a]
 variantsToDiffs _ [] _ = []
-variantsToDiffs haplo variants@(f:_) sample = 
+variantsToDiffs haplo variants i = 
     let ge = case haplo of
                   HaploLeft -> [Geno10, Geno11]
                   HaploRight -> [Geno01, Geno11]
-    in case elemIndex sample (toList $ sampleIds f) of
-            Nothing -> []
-            Just i -> trace "onediff" [Diff (position v) (reference v) (alternative v) | v <- variants, (!) (genotypes v) i `elem` ge ]
+    in trace "onediff" [Diff (position v) (reference v) (alternative v) | v <- variants, (V.!) (genotypes v) i `elem` ge ]
 
 findPatterns :: Chromosome -> FilePath -> FilePath -> FilePath -> IO Bool
 findPatterns chr referenceGenomeFile vcfFile resultFile = do
@@ -69,11 +61,12 @@ findPatterns chr referenceGenomeFile vcfFile resultFile = do
         Left err -> print err >> return False
         Right [] -> print ("No variant loaded" :: String) >> return False
         Right variants@(x:_) -> do
-            let samples = toList (sampleIds x) :: [SampleId]
+            let sampleIndexes = V.iterateN (V.length (sampleIds x)) (+1) 0 :: V.Vector Int
+            let sampleIndexesTwoHaplotypes = sampleIndexes <> sampleIndexes
             forM_ peaks $ \(peakStart, peakEnd) -> do
                 let variantsInPeak = takeWhile (\v -> position v <= peakEnd) $ dropWhile (\v -> position v < peakStart) variants
-                let diffs = map (variantsToDiffs HaploLeft variantsInPeak <> variantsToDiffs HaploRight variantsInPeak) samples :: [[Diff ZeroBased]]
-                let block = mkNucleotideAndPositionBlock $ map (applyVariants takeReferenceGenome peakStart peakEnd) diffs
+                let diffs = V.map (variantsToDiffs HaploLeft variantsInPeak <> variantsToDiffs HaploRight variantsInPeak) sampleIndexesTwoHaplotypes
+                let block = mkNucleotideAndPositionBlock $ map (applyVariants takeReferenceGenome peakStart peakEnd) (V.toList diffs)
                 print $ blockInfo block
                 matches <- findPatternsInBlock block patterns
                 print matches

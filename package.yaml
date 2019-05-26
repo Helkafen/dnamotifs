@@ -14,8 +14,6 @@ description:         Find motifs in DNA sequences using the Jaccard distance
 
 dependencies:
 - base >= 4.7 && < 5
-- language-c-quote
-- mainland-pretty
 - vector
 - time
 - raw-strings-qq
@@ -26,8 +24,6 @@ dependencies:
 - zlib
 - either
 - dlist
-- bytestring-to-vector
-- split
 
 ghc-options:
   - -Wall

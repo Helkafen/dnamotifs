@@ -6,7 +6,6 @@ import Test.Framework
 --import           Foreign.C.Types                 (CChar)
 import           Data.Vector.Storable            (Vector)
 import qualified Data.Vector.Storable            as V
-import qualified Data.Vector.Unboxed             as U
 import qualified Data.Vector.Generic             as G
 import           Data.Monoid                     ((<>))
 import qualified Data.Text                       as T
@@ -18,6 +17,7 @@ import PatternFind
 import Lib
 import Fasta (takeRef)
 import Vcf (parseVariant, filterOrderedIntervals, parseVcfContent)
+import Bed (parseBedContent)
 
 inputDataSample0 :: B.ByteString
 inputDataSample0 = B.pack [a,a,a,a,c,g,a] <> B.replicate 93 a
@@ -221,6 +221,13 @@ test_parseVcfContent_1 = do
   let parsed = parseVcfContent [(Position 5, Position 15), (Position 18, Position 25)] vcf
   let var p = Variant (Chromosome "1") (Position p) (Just $ "name" <> T.pack (show p)) (B.pack [c]) (B.pack [a]) (G.fromList [Geno00, Geno01]) (G.fromList [SampleId "sample1", SampleId "sample2"])
   let expected = Right [var 5, var 12, var 15, var 21]
+  assertEqual expected parsed
+
+test_parseBed_1 :: IO ()
+test_parseBed_1 = do
+  let bedContent = "chr1\t5\t6\nchr1\t8\t10\nchr2\t100\t110" :: T.Text
+  let parsed = parseBedContent (Chromosome "1") bedContent
+  let expected = Right [(Position 5, Position 6), (Position 8, Position 10)]
   assertEqual expected parsed
 
 main :: IO ()

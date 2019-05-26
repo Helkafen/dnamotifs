@@ -27,9 +27,12 @@ pattern_CGA = [Pweight 0 1 0 0, Pweight 0 0 1 0]
 pattern_cccccccccc = [cPattern, cPattern, cPattern, cPattern, cPattern, cPattern, cPattern, cPattern, cPattern, cPattern]
   where cPattern = Pweight 0 0 0.001 0
 
+patterns :: Patterns
+patterns = mkPatterns $ [pattern_CG, pattern_cCGA, pattern_CGA] ++ replicate 50 pattern_cccccccccc ++ [pattern_CG]
+
 bench :: IO ()
 bench = do
-    matches <- findPatternsInBlock (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns)
+    matches <- findPatternsInBlock (mkNucleotideAndPositionBlock inputData) patterns
     print (expected == matches)
   where numberOfPeople = 10000 :: Int
 
@@ -38,8 +41,6 @@ bench = do
 
         inputDataPositions :: Vector CInt
         inputDataPositions = V.fromList $ take (B.length inputDataSample0) [0..]
-
-        patterns = [pattern_CG, pattern_cCGA, pattern_CGA] ++ replicate 50 pattern_cccccccccc ++ [pattern_CG]
 
         expected = [Match {mPatternId = 53, mScore = 1000, mPosition = 0, mSampleId = 1, mMatched = [c, g]}
                     ,Match {mPatternId = 2,  mScore = 1000, mPosition = 0, mSampleId = 1, mMatched = [c, g]}
@@ -54,7 +55,7 @@ main = do
     print ("Hello world" :: String)
     t1 <- getPOSIXTime
     --bench
-    _ <- findPatterns (Chromosome "1") "/media/seb/TERA/lab/hg38.fa" "/home/seb/masters/topmed/exome_modified_header_100000_chr_100s.vcf.gz" "resultFile.tab"
+    _ <- findPatterns (Chromosome "1") patterns "Bcell-13.bed" "/home/seb/masters/hg38.fa" "/home/seb/masters/topmed/exome_modified_header_100000_chr_100s.vcf.gz" "resultFile.tab"
     t2 <- getPOSIXTime
     print (round $ (t2 - t1) * 1000 :: Integer) -- milliseconds
     pure ()

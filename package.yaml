@@ -45,7 +45,7 @@ library:
       - -Wall
   
 executables:
-  01-hello-world:
+  dnamotifs:
     main:        Main.hs
     source-dirs:
       - app

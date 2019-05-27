@@ -10,7 +10,7 @@ import           Foreign.C.Types                 (CInt)
 import           Data.Word (Word8)
 
 data Haplotype = HaploLeft | HaploRight
-    deriving (Eq)
+    deriving (Eq, Show)
 
 data Pweight = Pweight {
     wa :: Float,

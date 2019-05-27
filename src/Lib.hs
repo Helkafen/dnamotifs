@@ -1,8 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
 
 module Lib where
 
+import qualified Data.Map
+import qualified Data.List
 import qualified Data.Set as Set
 import qualified Data.Vector as V
 import qualified Data.Vector.Storable as STO
@@ -70,15 +73,47 @@ findPatterns chr patterns peakFile referenceGenomeFile vcfFile resultFile = do
                     forM_ peaks $ \(peakStart, peakEnd) -> do
                         let variantsInPeak = takeWhile (\v -> position v <= peakEnd) $ dropWhile (\v -> position v < peakStart) variants
                         let diffs = V.map (variantsToDiffs HaploLeft variantsInPeak <> variantsToDiffs HaploRight variantsInPeak) sampleIndexesTwoHaplotypes
-                        let numberOfUniqueSequences = length (Set.fromList (V.toList diffs))
+
+                        -- We don't want to generate and scan the same haplotypes n times in a large population, so
+                        -- we put the unique haplotypes in an array, scan that array, then use the indices (mSampleId) 
+                        -- of each Match to recover the [(SampleId, Haplotype)] of origin
+                        let uniqueDiffs = Set.toList $ Set.fromList (V.toList diffs)
+                        let numberOfUniqueSequences = length uniqueDiffs
                         print $ "Number of unique sequences :" ++ show numberOfUniqueSequences ++ "/" ++ show (V.length (sampleIds x))
-                        let block = mkNucleotideAndPositionBlock $ map (applyVariants takeReferenceGenome peakStart peakEnd) (V.toList diffs)
+
+                        let haplotypeIds = V.map (,HaploLeft) (sampleIds x) <> V.map (,HaploRight) (sampleIds x) :: V.Vector (SampleId, Haplotype)
+
+                        -- Just some book keeping
+                        let m = Data.Map.fromListWith (++) (zip (V.toList diffs) (map (:[]) (V.toList haplotypeIds))) :: Data.Map.Map [Diff ZeroBased] [(SampleId, Haplotype)]
+
+                        -- The actual scan
+                        let block = mkNucleotideAndPositionBlock (map (applyVariants takeReferenceGenome peakStart peakEnd) uniqueDiffs)
                         print $ blockInfo block
                         matches <- findPatternsInBlock block patterns
                         print matches
-                        appendFile resultFile (show matches)
+
+                        -- Recover the [(SampleId, Haplotype)] of each match and print
+                        forM_ matches $ \match -> do
+                            let diffsOfMatch = uniqueDiffs !! mSampleId match :: [Diff ZeroBased]
+                            let haploIdsOfMatch = Data.Map.findWithDefault (error "Coding error: should find indices") diffsOfMatch m :: [(SampleId, Haplotype)]
+                            let strings = map (formatMatch chr peakStart peakEnd match) haploIdsOfMatch :: [String]
+                            print strings
+                            appendFile resultFile (Data.List.concat strings)
+
                     return True
 
+
+formatMatch :: Chromosome -> Position ZeroBased -> Position ZeroBased -> Match -> (SampleId, Haplotype) -> String
+formatMatch (Chromosome chr) (Position peakStart) (Position peakStop) (Match patId score pos _ matched) (SampleId sample, haplo) =
+    Data.List.intercalate "\t" [T.unpack chr
+                               ,show pos
+                               ,show peakStart <> "-" <> show peakStop
+                               ,show patId
+                               ,show sample
+                               ,show haplo
+                               ,show score
+                               ,show matched
+                               ,"\n"]
 
 headOr :: a -> [a] -> a 
 headOr def [] = def

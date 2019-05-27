@@ -19,7 +19,7 @@ import Types
 newtype Patterns = Patterns (Vector CInt)
 
 -- numberOfPeople, blockSize, nucleotides, positions
-data NucleotideAndPositionBlock = NucleotideAndPositionBlock Int Int B.ByteString (Vector CInt)
+data NucleotideAndPositionBlock = NucleotideAndPositionBlock {-# UNPACK #-}!Int {-# UNPACK #-}!Int {-# UNPACK #-}!B.ByteString {-# UNPACK #-}!(Vector CInt)
 
 blockInfo :: NucleotideAndPositionBlock -> String
 blockInfo (NucleotideAndPositionBlock numberOfPeople blockSize _ positions) = "block " <> show numberOfPeople <> " " <> show blockSize <> " " <> show (V.minimum positions) <> " " <> show (V.maximum positions)

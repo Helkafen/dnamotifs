@@ -22,12 +22,13 @@ data Pweight = Pweight {
 type Pattern = [Pweight]
 
 data Match = Match {
-    mPatternId :: Int, -- 0 based
-    mScore :: Int,     -- 0 - 1000
-    mPosition :: Int,  -- 0 based
-    mSampleId :: Int,
-    mMatched :: [Nucleotide]
+    mPatternId :: !Int, -- 0 based
+    mScore :: !Int,     -- 0 - 1000
+    mPosition :: !Int,  -- 0 based
+    mSampleId :: !Int,
+    mMatched :: ![Nucleotide]
 } deriving (Eq, Show)
+
 
 -- They need to keep theses values, because the C function uses them as memory offsets in a table
 type Nucleotide = Word8
@@ -41,7 +42,7 @@ t = 4
 type BaseSequence = B.ByteString
 
 -- Base sequence + reference position
-data BaseSequencePosition = BaseSequencePosition BaseSequence (STO.Vector CInt) -- TODO CInt16 for memory bandwidth
+data BaseSequencePosition = BaseSequencePosition {-# UNPACK #-} !BaseSequence {-# UNPACK #-} !(STO.Vector CInt) -- TODO CInt16 for memory bandwidth
     deriving (Eq, Show)
 
 newtype Chromosome = Chromosome { unChr :: Text }
@@ -62,16 +63,16 @@ newtype SampleId = SampleId Text
 
 -- 0-based (not like in a VCF, which is 1-based)
 data Variant = Variant {
-    chromosome :: Chromosome,
-    position :: Position0,
-    variantId :: Maybe Text,
-    reference :: BaseSequence,
-    alternative :: BaseSequence,
-    genotypes :: V.Vector Genotype,
-    sampleIds :: V.Vector SampleId
+    chromosome :: !Chromosome,
+    position :: !Position0,
+    variantId :: !(Maybe Text),
+    reference :: !BaseSequence,
+    alternative :: !BaseSequence,
+    genotypes :: !(V.Vector Genotype),
+    sampleIds :: !(V.Vector SampleId)
 } deriving (Eq, Show)
 
-data Diff = Diff Position0 BaseSequence BaseSequence -- pos, ref, alt
+data Diff = Diff !Position0 !BaseSequence !BaseSequence -- pos, ref, alt
   deriving (Eq, Ord, Show)
 
 data Error = ParsingError Text | MissingFile FilePath | NoVariantFound FilePath

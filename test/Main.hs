@@ -18,6 +18,7 @@ import Lib
 import Fasta (takeRef)
 import Vcf (parseVariant, filterOrderedIntervals, parseVcfContent)
 import Bed (parseBedContent)
+import MotifDefinition (parseMotifsContent)
 
 inputDataSample0 :: B.ByteString
 inputDataSample0 = B.pack [a,a,a,a,c,g,a] <> B.replicate 93 a
@@ -229,6 +230,22 @@ test_parseBed_1 = do
   let parsed = parseBedContent (Chromosome "1") bedContent
   let expected = Right [(Position 5, Position 6), (Position 8, Position 10)]
   assertEqual expected parsed
+
+motifString :: T.Text
+motifString = T.replace "   " "\t" (motifString1 <> motifString2)
+  where motifString1 = ">ATGACTCATC\tAP-1(bZIP)/ThioMac-PU.1-ChIP-Seq(GSE21512)/Homer        6.049537        -1.782996e+03   0       9805.3,5781.0,3085.1,5.0,-- 0.00e+00\n0.419\t0.275\t0.277\t0.028\n0.001\t0.001\t0.001\t0.997\n"
+        motifString2 = ">SCCTSAGGSCAW\tAP-2gamma(AP2)/MCF7-TFAP2C-ChIP-Seq(GSE21234)/Homer     6.349794        -24627.169865   0       T:26194.0(44.86%),413.7-- (9.54%),P:1e-10695\n0.005\t0.431\t0.547\t0.017\n0.001\t0.997\t0.001\t0.001\n0.001\t0.947\t0.001\t0.051"
+
+
+test_motif_parser_1 :: IO ()
+test_motif_parser_1 = do
+  let parsed = parseMotifsContent motifString
+  let expected1 = ("AP-1", [Pweight{wa = 0.419, wc = 0.275, wg = 0.277, wt = 2.8e-2}, Pweight{wa = 1.0e-3, wc = 1.0e-3, wg = 1.0e-3, wt = 0.997}])
+  let expected2 = ("AP-2gamma", [Pweight{wa = 5.0e-3, wc = 0.431, wg = 0.547, wt = 1.7e-2}
+                               , Pweight{wa = 1.0e-3, wc = 0.997, wg = 1.0e-3, wt = 1.0e-3}
+                               , Pweight{wa = 1.0e-3, wc = 0.947, wg = 1.0e-3, wt = 5.1e-2}])
+
+  assertEqual (Right [expected1, expected2]) parsed
 
 main :: IO ()
 main = 

@@ -32,7 +32,7 @@ data Pweight = Pweight {
     wc :: Float,
     wg :: Float,
     wt :: Float
-} deriving (Show)
+} deriving (Eq, Show)
 
 type Pattern = [Pweight]
 

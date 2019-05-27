@@ -4,12 +4,16 @@ module Main where
 import           Data.Vector.Storable            (Vector)
 import qualified Data.Vector.Storable            as V
 import qualified Data.ByteString                 as B
+import qualified Data.Text                       as T
 import           Data.Monoid                     ((<>))
 import           Data.Time.Clock.POSIX (getPOSIXTime)
 import           Foreign.C.Types                 (CInt)
+import           System.Environment              (getArgs)
+import Data.List (elem)
 import Types
 import PatternFind
 import Lib (findPatterns)
+import MotifDefinition (loadMotifs)
 
 inputDataSample0 :: B.ByteString
 inputDataSample0 = B.pack [a,a,a,a,c,g,a] <> B.replicate 93 a
@@ -52,10 +56,19 @@ bench = do
 
 main :: IO()
 main = do
-    print ("Hello world" :: String)
-    t1 <- getPOSIXTime
-    --bench
-    _ <- findPatterns (Chromosome "1") patterns "Bcell-13.bed" "/home/seb/masters/hg38.fa" "/home/seb/masters/topmed/exome_modified_header_100000_chr_100s.vcf.gz" "resultFile.tab"
-    t2 <- getPOSIXTime
-    print (round $ (t2 - t1) * 1000 :: Integer) -- milliseconds
-    pure ()
+    args <- getArgs
+    case args of
+      [] -> do
+        print ("Hello world" :: String)
+        t1 <- getPOSIXTime
+        --bench
+        _ <- findPatterns (Chromosome "1") patterns "Bcell-13.bed" "/home/seb/masters/hg38.fa" "/home/seb/masters/topmed/exome_modified_header_100000_chr_100s.vcf.gz" "resultFile.tab"
+        t2 <- getPOSIXTime
+        print (round $ (t2 - t1) * 1000 :: Integer) -- milliseconds
+        pure ()
+      [chrom, motifFile, referenceGenomeFastaFile, peakBedFile, vcfFile, outputFile] -> do
+        let patternNames = ["GATA1"] :: [T.Text]
+        wantedPatterns <- (mkPatterns . map snd . filter ((`elem` patternNames) . fst)) <$> loadMotifs motifFile
+        _ <- findPatterns (Chromosome $ T.pack chrom) wantedPatterns peakBedFile referenceGenomeFastaFile vcfFile outputFile
+        pure ()
+      _ -> print ("Usage: xxx" :: String)

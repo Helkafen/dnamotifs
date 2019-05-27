@@ -200,7 +200,7 @@ test_parse_1 :: IO ()
 test_parse_1 = do
   let line = "chr1\t69081\t1:69081:G:C\tC\tG\t.\t.\t.\tGT\t1/1\t1/1"
   let sampleIdentifiers = G.fromList [SampleId "sample1", SampleId "sample2"]
-  assertEqual (Right $ Variant (Chromosome "1") (Position 69080) (Just "1:69081:G:C") (B.pack [c]) (B.pack [g]) (G.fromList [Geno11, Geno11]) sampleIdentifiers) (parseVariant sampleIdentifiers line)
+  assertEqual (Right $ Variant (Chromosome "1") (Position 69080) (Just "1:69081:G:C") (B.pack [c]) (B.pack [g]) (G.fromList [geno11, geno11]) sampleIdentifiers) (parseVariant sampleIdentifiers line)
 
 test_filterOrderedIntervals_1 :: IO ()
 test_filterOrderedIntervals_1 = do
@@ -219,7 +219,7 @@ test_parseVcfContent_1 = do
              "chr1\t22\tname21\tC\tA\t\t\t\t\t0/0\t0/1"
             ] :: [T.Text]
   let parsed = parseVcfContent [(Position 5, Position 15), (Position 18, Position 25)] vcf
-  let var p = Variant (Chromosome "1") (Position p) (Just $ "name" <> T.pack (show p)) (B.pack [c]) (B.pack [a]) (G.fromList [Geno00, Geno01]) (G.fromList [SampleId "sample1", SampleId "sample2"])
+  let var p = Variant (Chromosome "1") (Position p) (Just $ "name" <> T.pack (show p)) (B.pack [c]) (B.pack [a]) (G.fromList [geno00, geno01]) (G.fromList [SampleId "sample1", SampleId "sample2"])
   let expected = Right [var 5, var 12, var 15, var 21]
   assertEqual expected parsed
 

@@ -1,6 +1,21 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
-module Types where
+module Types (
+  Haplotype(..),
+  Pweight(..),
+  Pattern,
+  Match(..),
+  Nucleotide, n, a, c, g, t,
+  Genotype, geno00, geno01, geno10, geno11, -- Do not export the data constructor to forbid the creation of illegal values
+  BaseSequence,
+  BaseSequencePosition(..),
+  Chromosome(..),
+  Position0(..),
+  SampleId(..),
+  Variant(..),
+  Diff(..),
+  Error(..),
+) where
 
 import           Data.Text (Text)
 import qualified Data.ByteString as B
@@ -39,6 +54,15 @@ c = 2
 g = 3
 t = 4
 
+newtype Genotype = Genotype Word8
+    deriving (Eq, Show)
+
+geno00, geno01, geno10, geno11 :: Genotype
+geno00 = Genotype 10
+geno01 = Genotype 11
+geno10 = Genotype 12
+geno11 = Genotype 13
+
 type BaseSequence = B.ByteString
 
 -- Base sequence + reference position
@@ -53,8 +77,7 @@ newtype Chromosome = Chromosome { unChr :: Text }
 newtype Position0 = Position Int
   deriving (Eq, Ord, Show, Num, Enum, Real, Integral, STO.Storable)
 
-data Genotype = Geno00 | Geno01 | Geno10 | Geno11
-  deriving (Eq, Show)
+
   
 -- The ID of a person
 newtype SampleId = SampleId Text

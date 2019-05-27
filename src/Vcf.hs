@@ -64,14 +64,14 @@ chromosomeParser = choice [autosomeParser, xParser, yParser]
 
 genoParser :: Parser Genotype
 genoParser = choice [
-    string "0/0" $> Geno00,
-    string "0|0" $> Geno00,
-    string "0/1" $> Geno01,
-    string "1/0" $> Geno10,
-    string "1/1" $> Geno11,
-    string "0|1" $> Geno01,
-    string "1|0" $> Geno10,
-    string "1|1" $> Geno11]
+    string "0/0" $> geno00,
+    string "0|0" $> geno00,
+    string "0/1" $> geno01,
+    string "1/0" $> geno10,
+    string "1/1" $> geno11,
+    string "0|1" $> geno01,
+    string "1|0" $> geno10,
+    string "1|1" $> geno11]
 
 variantIdParser :: Parser (Maybe Text)
 variantIdParser = choice [none, rs] <?> "variant_name"

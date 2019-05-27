@@ -50,8 +50,8 @@ variantsToDiffs :: Haplotype -> [Variant] -> Int -> [Diff]
 variantsToDiffs _ [] _ = []
 variantsToDiffs haplo variants i = 
     let ge = case haplo of
-                  HaploLeft -> [Geno10, Geno11]
-                  HaploRight -> [Geno01, Geno11]
+                  HaploLeft -> [geno10, geno11]
+                  HaploRight -> [geno01, geno11]
     in trace "onediff" [Diff (position v) (reference v) (alternative v) | v <- variants, (V.!) (genotypes v) i `elem` ge ]
 
 findPatterns :: Chromosome -> Patterns -> FilePath -> FilePath -> FilePath -> FilePath -> IO Bool

@@ -90,14 +90,14 @@ findPatterns chr patterns peakFile referenceGenomeFile vcfFile resultFile = do
                         let block = mkNucleotideAndPositionBlock (map (applyVariants takeReferenceGenome peakStart peakEnd) uniqueDiffs)
                         print $ blockInfo block
                         matches <- findPatternsInBlock block patterns
-                        print matches
+                        --print matches
 
                         -- Recover the [(SampleId, Haplotype)] of each match and print
                         forM_ matches $ \match -> do
                             let diffsOfMatch = uniqueDiffs !! mSampleId match :: [Diff]
                             let haploIdsOfMatch = Data.Map.findWithDefault (error "Coding error: should find indices") diffsOfMatch m :: [(SampleId, Haplotype)]
                             let strings = map (formatMatch chr peakStart peakEnd match) haploIdsOfMatch :: [String]
-                            print strings
+                            --print strings
                             appendFile resultFile (Data.List.concat strings)
 
                     return True

@@ -25,7 +25,7 @@ blockInfo :: NucleotideAndPositionBlock -> String
 blockInfo (NucleotideAndPositionBlock numberOfPeople blockSize _ positions) = "block " <> show numberOfPeople <> " " <> show blockSize <> " " <> show (V.minimum positions) <> " " <> show (V.maximum positions)
 
 vectorToMatches :: Vector CInt -> [Match]
-vectorToMatches v = mapMaybe toMatch (list4uple $ V.toList v)
+vectorToMatches v = reverse $ mapMaybe toMatch (list4uple $ V.toList v)
     where toMatch (p:s:pos:sam:matchedSequence) = Just $ Match (fromIntegral p) (fromIntegral s) (fromIntegral pos) (fromIntegral sam) (trimMatchedSequence $ map fromIntegral matchedSequence)
           toMatch [] = Nothing
           toMatch x = error ("Wrong size in Match vector: " ++ show (length x))

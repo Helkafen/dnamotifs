@@ -25,16 +25,21 @@ dependencies:
 - either
 - dlist
 - containers
+- derive-storable
+- derive-storable-plugin
 
 ghc-options:
   - -Wall
   - -Wincomplete-uni-patterns
   - -Wincomplete-record-updates
+  - -fplugin Foreign.Storable.Generic.Plugin
 
 _exe-ghc-options: &exe-ghc-options
   - -threaded
   - -rtsopts
   - -with-rtsopts=-N
+  - -O2
+  - -Wall
  # - -Werror
 
 library:
@@ -43,6 +48,7 @@ library:
       - src
     ghc-options:
       - -Wall
+      - -O2
   
 executables:
   dnamotifs:

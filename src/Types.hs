@@ -1,4 +1,4 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, DeriveGeneric #-}
 
 module Types (
   Haplotype(..),
@@ -23,6 +23,8 @@ import qualified Data.Vector as V
 import qualified Data.Vector.Storable as STO
 import           Foreign.C.Types                 (CInt)
 import           Data.Word (Word8)
+import           Foreign.Storable.Generic
+import           GHC.Generics
 
 data Haplotype = HaploLeft | HaploRight
     deriving (Eq, Show)
@@ -55,7 +57,9 @@ g = 3
 t = 4
 
 newtype Genotype = Genotype Word8
-    deriving (Eq, Show)
+    deriving (Eq, Show, Generic)
+
+instance GStorable Genotype
 
 geno00, geno01, geno10, geno11 :: Genotype
 geno00 = Genotype 10
@@ -91,7 +95,7 @@ data Variant = Variant {
     variantId :: !(Maybe Text),
     reference :: !BaseSequence,
     alternative :: !BaseSequence,
-    genotypes :: !(V.Vector Genotype),
+    genotypes :: !(STO.Vector Genotype),
     sampleIds :: !(V.Vector SampleId)
 } deriving (Eq, Show)
 

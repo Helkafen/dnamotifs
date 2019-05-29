@@ -52,7 +52,7 @@ variantsToDiffs haplo variants i =
     let ge = case haplo of
                   HaploLeft -> [geno10, geno11]
                   HaploRight -> [geno01, geno11]
-    in trace "onediff" [Diff (position v) (reference v) (alternative v) | v <- variants, (V.!) (genotypes v) i `elem` ge ]
+    in trace "onediff" [Diff (position v) (reference v) (alternative v) | v <- variants, (STO.!) (genotypes v) i `elem` ge ]
 
 findPatterns :: Chromosome -> Patterns -> FilePath -> FilePath -> FilePath -> FilePath -> IO Bool
 findPatterns chr patterns peakFile referenceGenomeFile vcfFile resultFile = do

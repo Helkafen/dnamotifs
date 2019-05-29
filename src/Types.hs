@@ -55,7 +55,12 @@ newtype Nucleotide = Nucleotide { unNuc :: Word8 }
 instance GStorable Nucleotide
 
 instance TextShow Nucleotide where
-  showb (Nucleotide x) = showb x
+  showb (Nucleotide 0) = showb ("N")
+  showb (Nucleotide 1) = showb ("A")
+  showb (Nucleotide 2) = showb ("C")
+  showb (Nucleotide 3) = showb ("G")
+  showb (Nucleotide 4) = showb ("T")
+  showb (Nucleotide _) = showb ("_")
 
 n, a, c, g, t :: Nucleotide
 n = Nucleotide 0
@@ -122,8 +127,20 @@ data Variant = Variant {
     sampleIds :: !(V.Vector SampleId)
 } deriving (Eq, Show)
 
+showBaseSequence :: BaseSequence -> String
+showBaseSequence = map tr . B.unpack
+  where tr 0 = 'N'
+        tr 1 = 'A'
+        tr 2 = 'C'
+        tr 3 = 'G'
+        tr 4 = 'T'
+        tr _ = '_'
+
 data Diff = Diff !Position0 !BaseSequence !BaseSequence -- pos, ref, alt
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord)
+
+instance Show Diff where
+  show (Diff (Position p) ref alt) = "Diff " <> show p <> ": " <> showBaseSequence ref <> "->" <> showBaseSequence alt
 
 data Error = ParsingError Text | MissingFile FilePath | NoVariantFound FilePath
   deriving (Eq, Show)

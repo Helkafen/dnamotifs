@@ -5,7 +5,6 @@
 module Lib where
 
 import qualified Data.Map
-import qualified Data.List
 import qualified Data.Set as Set
 import qualified Data.Vector as V
 import qualified Data.Vector.Storable as STO
@@ -14,8 +13,6 @@ import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import           Control.Monad (forM_)
 import           System.IO (appendFile)
-import qualified Codec.Compression.GZip as GZip
-import           Debug.Trace (trace)
 import           TextShow (showt)
 
 import Types
@@ -48,27 +45,27 @@ applyVariants takeReferenceGenome (Position start) (Position end) allDiffs =
 loadPatterns :: FilePath -> IO Patterns
 loadPatterns _ = return $ mkPatterns []
 
-hasVariantLeft geno00 = False
-hasVariantLeft geno10 = True
-hasVariantLeft geno11 = True
-hasVariantLeft geno01 = False
-hasVariantLeft _ = error "Bad geno"
+hasVariantLeft :: Genotype -> Bool
+hasVariantLeft x  | x == geno00 = False
+                  | x == geno10 = True
+                  | x == geno11 = True
+                  | x == geno01 = False
+                  | otherwise = error "Bad geno"
 
-hasVariantRight geno00 = False
-hasVariantRight geno01 = True
-hasVariantRight geno11 = True
-hasVariantRight geno10 = False
-hasVariantRight _ = error "Bad geno"
+hasVariantRight :: Genotype -> Bool
+hasVariantRight x | x == geno00 = False
+                  | x == geno01 = True
+                  | x == geno11 = True
+                  | x == geno10 = False
+                  | otherwise = error "Bad geno"
+
 
 variantsToDiffs :: Haplotype -> [Variant] -> Int -> [Diff]
 variantsToDiffs _ [] _ = []
 variantsToDiffs haplo variants i = case haplo of
     HaploLeft  -> [Diff (position v) (reference v) (alternative v) | v <- variants, hasVariantLeft  ((STO.!) (genotypes v) i) ]
     HaploRight -> [Diff (position v) (reference v) (alternative v) | v <- variants, hasVariantRight ((STO.!) (genotypes v) i) ]
-    --let ge = case haplo of
-    --              HaploLeft -> [geno10, geno11]
-    --              HaploRight -> [geno01, geno11]
-    --in 
+
 
 findPatterns :: Chromosome -> Patterns -> Int -> FilePath -> FilePath -> FilePath -> FilePath -> IO Bool
 findPatterns chr patterns minScore peakFile referenceGenomeFile vcfFile resultFile = do

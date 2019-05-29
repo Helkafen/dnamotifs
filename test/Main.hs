@@ -20,14 +20,17 @@ import Vcf (parseVariant, filterOrderedIntervals, parseVcfContent)
 import Bed (parseBedContent)
 import MotifDefinition (parseMotifsContent)
 
+mkSeq :: [Nucleotide] -> B.ByteString
+mkSeq = B.pack . map unNuc
+
 inputDataSample0 :: B.ByteString
-inputDataSample0 = B.pack [a,a,a,a,c,g,a] <> B.replicate 93 a
+inputDataSample0 = mkSeq [a,a,a,a,c,g,a] <> B.replicate 93 (unNuc a)
 
 inputDataSample1 :: B.ByteString
-inputDataSample1 = B.pack [c,g,a,a,a,a,a] <> B.replicate 93 a
+inputDataSample1 = mkSeq [c,g,a,a,a,a,a] <> B.replicate 93 (unNuc a)
 
 inputDataSample2 :: B.ByteString
-inputDataSample2 = B.pack [a,a,a,a,a,a,a] <> B.replicate 93 a
+inputDataSample2 = mkSeq [a,a,a,a,a,a,a] <> B.replicate 93 (unNuc a)
 
 pattern_CG, pattern_cCGA, pattern_CGA, pattern_cccccccccc :: [Pweight]
 pattern_CG = [Pweight 0 1 0 0, Pweight 0 0 1 0]
@@ -129,79 +132,79 @@ refGenome = takeRef (B.pack [65,67,71,84]) -- ACGT
 test_apply_variant_1 :: IO ()
 test_apply_variant_1 = do
   let patched = applyVariants refGenome (Position 1) (Position 2) []
-  assertEqual (BaseSequencePosition (B.pack [c,g]) (V.fromList [1,2])) patched
+  assertEqual (BaseSequencePosition (mkSeq [c,g]) (V.fromList [1,2])) patched
 
 test_apply_variant_2 :: IO ()
 test_apply_variant_2 = do
   let patched = applyVariants refGenome (Position 0) (Position 2) []
-  assertEqual (BaseSequencePosition (B.pack [a, c, g]) (V.fromList [0,1,2])) patched
+  assertEqual (BaseSequencePosition (mkSeq [a, c, g]) (V.fromList [0,1,2])) patched
 
 test_apply_variant_3 :: IO ()
 test_apply_variant_3 = do
   let patched = applyVariants refGenome (Position 0) (Position 5) []
-  assertEqual (BaseSequencePosition (B.pack [a,c,g,t]) (V.fromList [0,1,2,3])) patched
+  assertEqual (BaseSequencePosition (mkSeq [a,c,g,t]) (V.fromList [0,1,2,3])) patched
 
 test_apply_variant_4 :: IO ()
 test_apply_variant_4 = do
-  let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 100 (B.pack [a]) (B.pack [c])]
-  assertEqual (BaseSequencePosition (B.pack [c,g]) (V.fromList [1,2])) patched
+  let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 100 (mkSeq [a]) (mkSeq [c])]
+  assertEqual (BaseSequencePosition (mkSeq [c,g]) (V.fromList [1,2])) patched
 ----prop_reverse :: [Int] -> Bool
 ----prop_reverse xs = xs == (myReverse (myReverse xs))
 test_apply_variant_5 :: IO ()
 test_apply_variant_5 = do
-  let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 1 (B.pack [c]) (B.pack [n])]
-  assertEqual (BaseSequencePosition (B.pack [n,g]) (V.fromList [1,2])) patched
+  let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 1 (mkSeq [c]) (mkSeq [n])]
+  assertEqual (BaseSequencePosition (mkSeq [n,g]) (V.fromList [1,2])) patched
 
 test_apply_variant_6 :: IO ()
 test_apply_variant_6 = do
-  let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 2 (B.pack [g]) (B.pack [a])]
-  assertEqual (BaseSequencePosition (B.pack [c,a]) (V.fromList [1,2])) patched
+  let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 2 (mkSeq [g]) (mkSeq [a])]
+  assertEqual (BaseSequencePosition (mkSeq [c,a]) (V.fromList [1,2])) patched
 
 test_apply_variant_7 :: IO ()
 test_apply_variant_7 = do
-  let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 1 (B.pack [c]) (B.pack [n]), Diff 2 (B.pack [g]) (B.pack [a])]
-  assertEqual (BaseSequencePosition (B.pack [n,a]) (V.fromList [1,2])) patched
+  let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 1 (mkSeq [c]) (mkSeq [n]), Diff 2 (mkSeq [g]) (mkSeq [a])]
+  assertEqual (BaseSequencePosition (mkSeq [n,a]) (V.fromList [1,2])) patched
 
 test_apply_variant_8 :: IO ()
 test_apply_variant_8 = do
-  let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 0 (B.pack [c]) (B.pack [n]), Diff 4 (B.pack [g]) (B.pack [a])]
-  assertEqual (BaseSequencePosition (B.pack [c,g]) (V.fromList [1,2])) patched
+  let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 0 (mkSeq [c]) (mkSeq [n]), Diff 4 (mkSeq [g]) (mkSeq [a])]
+  assertEqual (BaseSequencePosition (mkSeq [c,g]) (V.fromList [1,2])) patched
 
 test_apply_variant_9 :: IO ()
 test_apply_variant_9 = do
-  let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 1 (B.pack [c]) (B.pack [n,n])]
-  assertEqual (BaseSequencePosition (B.pack[n,n,g]) (V.fromList [1,1,2])) patched
+  let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 1 (mkSeq [c]) (mkSeq [n,n])]
+  assertEqual (BaseSequencePosition (mkSeq[n,n,g]) (V.fromList [1,1,2])) patched
 
 test_apply_variant_10 :: IO ()
 test_apply_variant_10 = do
-  let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 2 (B.pack [c]) (B.pack [n,n])]
-  assertEqual (BaseSequencePosition (B.pack[c,n,n]) (V.fromList[1,2,2])) patched
+  let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 2 (mkSeq [c]) (mkSeq [n,n])]
+  assertEqual (BaseSequencePosition (mkSeq[c,n,n]) (V.fromList[1,2,2])) patched
 
 test_apply_variant_11 :: IO ()
 test_apply_variant_11 = do
-  let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 3 (B.pack [c]) (B.pack [n,n])]
-  assertEqual (BaseSequencePosition (B.pack[c,g]) (V.fromList [1,2])) patched
+  let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 3 (mkSeq [c]) (mkSeq [n,n])]
+  assertEqual (BaseSequencePosition (mkSeq[c,g]) (V.fromList [1,2])) patched
 
 test_apply_variant_12 :: IO ()
 test_apply_variant_12 = do
-  let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 1 (B.pack [c, g]) (B.pack [n])]
-  assertEqual (BaseSequencePosition (B.pack[n]) (V.fromList [1])) patched
+  let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 1 (mkSeq [c, g]) (mkSeq [n])]
+  assertEqual (BaseSequencePosition (mkSeq[n]) (V.fromList [1])) patched
 
 test_apply_variant_13 :: IO ()
 test_apply_variant_13 = do
-  let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 2 (B.pack [g, t]) (B.pack [n])]
-  assertEqual (BaseSequencePosition (B.pack[c,n]) (V.fromList [1,2])) patched
+  let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 2 (mkSeq [g, t]) (mkSeq [n])]
+  assertEqual (BaseSequencePosition (mkSeq[c,n]) (V.fromList [1,2])) patched
 
 test_apply_variant_14 :: IO ()
 test_apply_variant_14 = do
-  let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 0 (B.pack [a, c, g]) (B.pack [n, n])]
-  assertEqual (BaseSequencePosition (B.pack[c,g]) (V.fromList [1,2])) patched -- For simplicity, do not apply a Diff that starts before the window we're observing
+  let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 0 (mkSeq [a, c, g]) (mkSeq [n, n])]
+  assertEqual (BaseSequencePosition (mkSeq[c,g]) (V.fromList [1,2])) patched -- For simplicity, do not apply a Diff that starts before the window we're observing
 
 test_parse_1 :: IO ()
 test_parse_1 = do
   let line = "chr1\t69081\t1:69081:G:C\tC\tG\t.\t.\t.\tGT\t1/1\t1/1"
   let sampleIdentifiers = G.fromList [SampleId "sample1", SampleId "sample2"]
-  assertEqual (Right $ Variant (Chromosome "1") (Position 69080) (Just "1:69081:G:C") (B.pack [c]) (B.pack [g]) (G.fromList [geno11, geno11]) sampleIdentifiers) (parseVariant sampleIdentifiers line)
+  assertEqual (Right $ Variant (Chromosome "1") (Position 69080) (Just "1:69081:G:C") (mkSeq [c]) (mkSeq [g]) (G.fromList [geno11, geno11]) sampleIdentifiers) (parseVariant sampleIdentifiers line)
 
 test_filterOrderedIntervals_1 :: IO ()
 test_filterOrderedIntervals_1 = do
@@ -220,7 +223,7 @@ test_parseVcfContent_1 = do
              "chr1\t22\tname21\tC\tA\t\t\t\t\t0/0\t0/1"
             ] :: [T.Text]
   let parsed = parseVcfContent [(Position 5, Position 15), (Position 18, Position 25)] vcf
-  let var p = Variant (Chromosome "1") (Position p) (Just $ "name" <> T.pack (show p)) (B.pack [c]) (B.pack [a]) (G.fromList [geno00, geno01]) (G.fromList [SampleId "sample1", SampleId "sample2"])
+  let var p = Variant (Chromosome "1") (Position p) (Just $ "name" <> T.pack (show p)) (mkSeq [c]) (mkSeq [a]) (G.fromList [geno00, geno01]) (G.fromList [SampleId "sample1", SampleId "sample2"])
   let expected = Right [var 5, var 12, var 15, var 21]
   assertEqual expected parsed
 

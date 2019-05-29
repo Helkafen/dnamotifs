@@ -5,7 +5,7 @@ module Types (
   Pweight(..),
   Pattern,
   Match(..),
-  Nucleotide, n, a, c, g, t,
+  Nucleotide(..), n, a, c, g, t, toNuc,
   Genotype, geno00, geno01, geno10, geno11, -- Do not export the data constructor to forbid the creation of illegal values
   BaseSequence,
   BaseSequencePosition(..),
@@ -48,13 +48,32 @@ data Match = Match {
 
 
 -- They need to keep theses values, because the C function uses them as memory offsets in a table
-type Nucleotide = Word8
+newtype Nucleotide = Nucleotide { unNuc :: Word8 }
+  deriving (Eq, Show, Generic)
+
+instance GStorable Nucleotide
+
 n, a, c, g, t :: Nucleotide
-n = 0
-a = 1
-c = 2
-g = 3
-t = 4
+n = Nucleotide 0
+a = Nucleotide 1
+c = Nucleotide 2
+g = Nucleotide 3
+t = Nucleotide 4
+
+-- ACGTacgtNn -> 01234
+{-# INLINE toNuc #-}
+toNuc :: Word8 -> Nucleotide
+toNuc 65 = a
+toNuc 67 = c
+toNuc 71 = g
+toNuc 84 = t
+toNuc 78 = n
+toNuc 97 = a
+toNuc 99 = c
+toNuc 103 = g
+toNuc 116 = t
+toNuc 110 = n
+toNuc other = error $ "Bad nucleotide " <> show other
 
 newtype Genotype = Genotype Word8
     deriving (Eq, Show, Generic)

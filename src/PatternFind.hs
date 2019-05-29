@@ -12,7 +12,6 @@ import qualified Data.Vector.Storable            as V
 import qualified Data.ByteString                 as B
 import           Data.Monoid                     ((<>))
 import           Data.Maybe                      (mapMaybe)
-import           Data.Word                       (Word8)
 
 import Types
 
@@ -26,7 +25,7 @@ blockInfo (NucleotideAndPositionBlock numberOfPeople blockSize _ positions) = "b
 
 vectorToMatches :: Vector CInt -> [Match]
 vectorToMatches v = mapMaybe toMatch (list4uple $ V.toList v)
-    where toMatch (p:s:pos:sam:matchedSequence) = Just $ Match (fromIntegral p) (fromIntegral s) (fromIntegral pos) (fromIntegral sam) (trimMatchedSequence $ map fromIntegral matchedSequence)
+    where toMatch (p:s:pos:sam:matchedSequence) = Just $ Match (fromIntegral p) (fromIntegral s) (fromIntegral pos) (fromIntegral sam) (trimMatchedSequence $ map (Nucleotide . fromIntegral) matchedSequence)
           toMatch [] = Nothing
           toMatch x = error ("Wrong size in Match vector: " ++ show (length x))
           trimMatchedSequence = reverse . dropWhile (==n) . reverse
@@ -46,8 +45,8 @@ pad :: V.Storable a => a -> Int -> Vector a -> Vector a
 pad e len v = v <> padding
     where padding = V.fromList $ replicate (len - V.length v) e
 
-padBS :: Word8 -> Int -> B.ByteString -> B.ByteString
-padBS e len v = B.append v (B.replicate (len - B.length v) e)
+padBS :: Nucleotide -> Int -> B.ByteString -> B.ByteString
+padBS (Nucleotide e) len v = B.append v (B.replicate (len - B.length v) e)
 
 -- Pad with nucleotide N if sizes are different
 mkNucleotideAndPositionBlock :: [BaseSequencePosition] -> NucleotideAndPositionBlock

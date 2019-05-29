@@ -48,7 +48,6 @@ library:
       - src
     ghc-options:
       - -Wall
-      - -O2
   
 executables:
   dnamotifs:

@@ -93,8 +93,8 @@ variantParser sampleIdentifiers = do
     chr <- chromosomeParser <* tab
     pos <- (Position . (\x -> x - 1)) <$> decimal <* tab
     name <- variantIdParser <* tab
-    ref <- (B.pack . map (toNuc . ord)) <$> many1 letter <* tab
-    alt <- (B.pack . map (toNuc . ord))  <$> many1 letter <* tab
+    ref <- (B.pack . map (unNuc . toNuc . fromIntegral . ord)) <$> many1 letter <* tab
+    alt <- (B.pack . map (unNuc . toNuc . fromIntegral . ord))  <$> many1 letter <* tab
     skipField >> skipField >> skipField >> skipField
     geno <- (STO.fromListN (V.length sampleIdentifiers) . map geno . T.split (=='\t')) <$> takeWhile1 (/='\n')
     guard $ STO.length geno == V.length sampleIdentifiers
@@ -106,16 +106,3 @@ variantParser sampleIdentifiers = do
 
 parseVariant :: V.Vector SampleId -> Text -> Either Error (Variant)
 parseVariant sampleIdentifiers s = mapLeft (ParsingError . (\e -> s <> " " <> T.pack e)) (parseOnly (variantParser sampleIdentifiers) s)
-
-toNuc :: Int -> Nucleotide
-toNuc 65 = a
-toNuc 67 = c
-toNuc 71 = g
-toNuc 84 = t
-toNuc 78 = n
-toNuc 97 = a
-toNuc 99 = c
-toNuc 103 = g
-toNuc 116 = t
-toNuc 110 = n
-toNuc other = error $ "Bad nucleotide " <> show other

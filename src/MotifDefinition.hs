@@ -10,10 +10,11 @@ import           Data.Either (partitionEithers)
 import Types
 
 loadMotifs :: FilePath -> IO [(T.Text, Pattern)]
-loadMotifs path = do content <- TIO.readFile path
+loadMotifs path = do putStr ("Load motif file " <> path <> "...")
+                     content <- TIO.readFile path
                      case parseMotifsContent content of
-                        Left errors -> print (show errors) >> error ("Error while loading motifs in " <> path)
-                        Right patterns -> print ("Loaded " <> path <> " successfully") >> return patterns
+                        Left errors -> print (show errors) >> error ("Motif loading error")
+                        Right patterns -> putStrLn ("Done") >> return patterns
 
 
 parseMotifsContent :: T.Text -> Either [String] [(T.Text, Pattern)]

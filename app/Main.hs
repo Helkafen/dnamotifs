@@ -57,18 +57,28 @@ bench = do
 main :: IO()
 main = do
     args <- getArgs
+    let patternNames = ["Fosl2", "JunD", "Gata1", "Jun-AP1", "Gata2", "Fosl2", "BATF", "Gata3", "Bach1", "Atf3", "Bach2", "NF-E2", "Gata4", "CEBP", "SpiB", "PU.1:IRF8",
+                        "Gata6", "Tcf12", "Tcf4", "STAT1", "CTCF", "IRF1", "MafK", "Atf4", "Ascl1", "Tcf3"] :: [T.Text]
+    
     case args of
       [] -> do
         print ("Hello world" :: String)
         t1 <- getPOSIXTime
         --bench
-        _ <- findPatterns (Chromosome "1") patterns "Bcell-13.bed" "/home/seb/masters/hg38.fa" "/home/seb/masters/topmed/exome_modified_header_100000_chr_100s.vcf.gz" "resultFile.tab"
+        -- From http://schemer.buenrostrolab.com :
+        --JUNB SMARCC1 FOSL2 FOSL1 JUND GATA1 JUN                  GATA2 FOS    BATF GATA3 BACH1 ATF3 BACH2 FOSB BCL11A BCL11B JDP2 GATA5 NFE2  SPI1D GATA4 CEBPB CEBPA SPIB IRF8      SPI1 CEBPD
+        --x            Fosl2       JunD Gata1 Jun-AP1 or c-Jun-CRE Gata2 Fosl2? BATF Gata3 Bach1 Atf3 Bach2                               NF-E2       Gata4 CEBP        SpiB PU.1:IRF8           
+        --
+        --LMO2 GATA6 CEBPG MESP1 MESP2 ID3 ID4 TCF12 TCF4 STAT1 CEBPE SPIC CTCF IRF1 STAT2 DBP MAFK ATF4 ASCL1 TCF3 MYOD1 ATOH8 MECOM ASCL2 IRF3 ZEB1 IRF9 NHLH1 LYL1
+        --x    Gata6                           Tcf12 Tcf4 STAT1            CTCF IRF1           MafK Atf4 Ascl1 Tcf3 
+        wantedPatterns <- (mkPatterns . map snd . filter ((`elem` patternNames) . fst)) <$> loadMotifs "homer.motifs"
+        _ <- findPatterns (Chromosome "1") patterns "chr1.bed" "hg38.fa" "chr1.vcf.gz" "resultFile.tab"
         t2 <- getPOSIXTime
         print (round $ (t2 - t1) * 1000 :: Integer) -- milliseconds
         pure ()
-      [chrom, motifFile, referenceGenomeFastaFile, peakBedFile, vcfFile, outputFile] -> do
-        let patternNames = ["GATA1"] :: [T.Text]
+      [chrom, referenceGenomeFastaFile, motifFile, peakBedFile, vcfFile, outputFile] -> do
         wantedPatterns <- (mkPatterns . map snd . filter ((`elem` patternNames) . fst)) <$> loadMotifs motifFile
         _ <- findPatterns (Chromosome $ T.pack chrom) wantedPatterns peakBedFile referenceGenomeFastaFile vcfFile outputFile
         pure ()
       _ -> print ("Usage: xxx" :: String)
+      

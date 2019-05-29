@@ -36,7 +36,9 @@ filterOrderedIntervals pos r xs = DList.toList (go r xs)
 
 
 readVcfWithGenotypes :: FilePath -> [(Position0, Position0)] -> IO (Either Error [Variant])
-readVcfWithGenotypes path regions = (parseVcfContent regions . dropWhile ("##" `T.isPrefixOf`)) <$> readGzippedLines path
+readVcfWithGenotypes path regions = do
+    putStrLn ("Loading VCF file " <> path)
+    (parseVcfContent regions . dropWhile ("##" `T.isPrefixOf`)) <$> readGzippedLines path
 
 sampleIdsInHeader :: Text -> V.Vector SampleId
 sampleIdsInHeader header = V.fromList $ map SampleId $ drop 9 (T.splitOn "\t" header)

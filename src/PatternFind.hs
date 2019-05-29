@@ -134,7 +134,7 @@ findPatterns sample_size block_size vec pos pat res_size = [C.block| int* {
                 }
 
                 int score = (1000 * score_inter) / score_union;
-                if(score >= 500) {
+                if(score >= 900) {
                     struct Match *match = malloc (sizeof (struct Match));
                     if (match == 0) {
                         printf("Failed malloc for a Match\n");
@@ -178,7 +178,7 @@ findPatterns sample_size block_size vec pos pat res_size = [C.block| int* {
     Match* p = match_head;
     int n = 0;
     while(p) {
-        printf("Match score=%d pattern_id=%d sample_id=%d position=%d \n", p->score, p->pattern, p->sample, p->position);
+        //printf("Match score=%d pattern_id=%d sample_id=%d position=%d \n", p->score, p->pattern, p->sample, p->position);
         matches[n+0] = p->pattern;
         matches[n+1] = p->score;
         matches[n+2] = p->position;
@@ -195,7 +195,7 @@ findPatterns sample_size block_size vec pos pat res_size = [C.block| int* {
         free(to_be_freed);
         n = n + (sizeof (MatchRecord) / 4);
     }
-    printf("match_number in this block: %d\n", match_number);
+    //printf("match_number in this block: %d\n", match_number);
     *($(int* res_size)) = match_number;
 
     return (int*)matches;

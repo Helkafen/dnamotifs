@@ -14,6 +14,7 @@ import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import           Control.Monad (forM_)
 import           System.IO (appendFile)
+import qualified Codec.Compression.GZip as GZip
 import           Debug.Trace (trace)
 
 import Types
@@ -52,7 +53,7 @@ variantsToDiffs haplo variants i =
     let ge = case haplo of
                   HaploLeft -> [geno10, geno11]
                   HaploRight -> [geno01, geno11]
-    in trace "onediff" [Diff (position v) (reference v) (alternative v) | v <- variants, (V.!) (genotypes v) i `elem` ge ]
+    in [Diff (position v) (reference v) (alternative v) | v <- variants, (V.!) (genotypes v) i `elem` ge]
 
 findPatterns :: Chromosome -> Patterns -> FilePath -> FilePath -> FilePath -> FilePath -> IO Bool
 findPatterns chr patterns peakFile referenceGenomeFile vcfFile resultFile = do
@@ -79,8 +80,6 @@ findPatterns chr patterns peakFile referenceGenomeFile vcfFile resultFile = do
                         -- of each Match to recover the [(SampleId, Haplotype)] of origin
                         let uniqueDiffs = Set.toList $ Set.fromList (V.toList diffs)
                         let numberOfUniqueSequences = length uniqueDiffs
-                        print $ "Number of unique sequences :" ++ show numberOfUniqueSequences ++ "/" ++ show (V.length (sampleIds x))
-
                         let haplotypeIds = V.map (,HaploLeft) (sampleIds x) <> V.map (,HaploRight) (sampleIds x) :: V.Vector (SampleId, Haplotype)
 
                         -- Just some book keeping
@@ -88,7 +87,7 @@ findPatterns chr patterns peakFile referenceGenomeFile vcfFile resultFile = do
 
                         -- The actual scan
                         let block = mkNucleotideAndPositionBlock (map (applyVariants takeReferenceGenome peakStart peakEnd) uniqueDiffs)
-                        print $ blockInfo block
+                        putStr $ (blockInfo block <> (", for " <> show (V.length (sampleIds x)) <> " people"))
                         matches <- findPatternsInBlock block patterns
                         --print matches
 
@@ -97,8 +96,12 @@ findPatterns chr patterns peakFile referenceGenomeFile vcfFile resultFile = do
                             let diffsOfMatch = uniqueDiffs !! mSampleId match :: [Diff]
                             let haploIdsOfMatch = Data.Map.findWithDefault (error "Coding error: should find indices") diffsOfMatch m :: [(SampleId, Haplotype)]
                             let strings = map (formatMatch chr peakStart peakEnd match) haploIdsOfMatch :: [String]
-                            --print strings
-                            appendFile resultFile (Data.List.concat strings)
+                            if (length strings == -1)
+                                then print strings
+                                else pure()
+                            --appendFile resultFile (Data.List.concat strings)
+                            --putStrLn ("No append" :: String)
+                            pure ()
 
                     return True
 
@@ -114,7 +117,3 @@ formatMatch (Chromosome chr) (Position peakStart) (Position peakStop) (Match pat
                                ,show score
                                ,show matched
                                ,"\n"]
-
-headOr :: a -> [a] -> a 
-headOr def [] = def
-headOr _ (x:_) = x

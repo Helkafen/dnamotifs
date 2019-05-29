@@ -14,7 +14,8 @@ import Types
 
 -- Hand tested (not anymore)
 loadFasta :: Chromosome -> FilePath -> IO (Int -> Int -> BaseSequencePosition, Int)
-loadFasta (Chromosome chr) filename = do alphaBaseSequence <- (BL.toStrict . transform . go) <$> BL.readFile filename
+loadFasta (Chromosome chr) filename = do putStrLn ("Load reference genome " <> filename)
+                                         alphaBaseSequence <- (BL.toStrict . transform . go) <$> BL.readFile filename
                                          pure (takeRef alphaBaseSequence, B.length alphaBaseSequence)
     where separator = fromIntegral (ord '>') :: Word8
           newLine = fromIntegral (ord '\n') :: Word8

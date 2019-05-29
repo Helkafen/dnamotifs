@@ -16,6 +16,7 @@ import           Control.Monad (forM_)
 import           System.IO (appendFile)
 import qualified Codec.Compression.GZip as GZip
 import           Debug.Trace (trace)
+import           TextShow (showt)
 
 import Types
 import Bed (readPeaks)
@@ -109,7 +110,7 @@ findPatterns chr patterns peakFile referenceGenomeFile vcfFile resultFile = do
                         forM_ matches $ \match -> do
                             let diffsOfMatch = uniqueDiffs !! mSampleId match :: [Diff]
                             let haploIdsOfMatch = Data.Map.findWithDefault (error "Coding error: should find indices") diffsOfMatch m :: [(SampleId, Haplotype)]
-                            let strings = map (formatMatch chr peakStart peakEnd match) haploIdsOfMatch :: [String]
+                            let strings = map (formatMatch chr peakStart peakEnd match) haploIdsOfMatch :: [T.Text]
                             if (length strings == -1)
                                 then print strings
                                 else pure()
@@ -119,15 +120,15 @@ findPatterns chr patterns peakFile referenceGenomeFile vcfFile resultFile = do
 
                     return True
 
-
-formatMatch :: Chromosome -> Position0 -> Position0 -> Match -> (SampleId, Haplotype) -> String
+-- Perf: 2.8   10.9 (from forM_ block)
+formatMatch :: Chromosome -> Position0 -> Position0 -> Match -> (SampleId, Haplotype) -> T.Text
 formatMatch (Chromosome chr) (Position peakStart) (Position peakStop) (Match patId score pos _ matched) (SampleId sample, haplo) =
-    Data.List.intercalate "\t" [T.unpack chr
-                               ,show pos
-                               ,show peakStart <> "-" <> show peakStop
-                               ,show patId
-                               ,show sample
-                               ,show haplo
-                               ,show score
-                               ,show matched
-                               ,"\n"]
+    T.intercalate "\t" [chr
+                       ,showt pos
+                       ,showt peakStart <> "-" <> showt peakStop
+                       ,showt patId
+                       ,showt sample
+                       ,if haplo == HaploLeft then "Left" else "Right"
+                       ,showt score
+                       ,showt matched
+                       ,"\n"]

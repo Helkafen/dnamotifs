@@ -27,6 +27,7 @@ dependencies:
 - containers
 - derive-storable
 - derive-storable-plugin
+- text-show
 
 ghc-options:
   - -Wall

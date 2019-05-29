@@ -25,6 +25,7 @@ import           Foreign.C.Types                 (CInt)
 import           Data.Word (Word8)
 import           Foreign.Storable.Generic
 import           GHC.Generics
+import           TextShow
 
 data Haplotype = HaploLeft | HaploRight
     deriving (Eq, Show)
@@ -52,6 +53,9 @@ newtype Nucleotide = Nucleotide { unNuc :: Word8 }
   deriving (Eq, Show, Generic)
 
 instance GStorable Nucleotide
+
+instance TextShow Nucleotide where
+  showb (Nucleotide x) = showb x
 
 n, a, c, g, t :: Nucleotide
 n = Nucleotide 0

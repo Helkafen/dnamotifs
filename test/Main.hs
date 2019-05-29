@@ -11,6 +11,7 @@ import           Data.Monoid                     ((<>))
 import qualified Data.Text                       as T
 import qualified Data.ByteString                 as B
 import           Foreign.C.Types                 (CInt)
+import           Data.Text.Encoding              (encodeUtf8)
 
 import Types
 import PatternFind
@@ -218,14 +219,14 @@ test_filterOrderedIntervals_1 = do
 
 test_parseVcfContent_1 :: IO ()
 test_parseVcfContent_1 = do
-  let vcf = ["#\t\t\t\t\t\t\t\t\tsample1\tsample2",
+  let vcf = map encodeUtf8 ["#\t\t\t\t\t\t\t\t\tsample1\tsample2",
              "chr1\t5\tname4\tC\tA\t\t\t\t\t0/0\t0/1",
              "chr1\t6\tname5\tC\tA\t\t\t\t\t0/0\t0/1",
              "chr1\t13\tname12\tC\tA\t\t\t\t\t0/0\t0/1",
              "chr1\t16\tname15\tC\tA\t\t\t\t\t0/0\t0/1",
              "chr1\t18\tname17\tC\tA\t\t\t\t\t0/0\t0/1",
              "chr1\t22\tname21\tC\tA\t\t\t\t\t0/0\t0/1"
-            ] :: [T.Text]
+            ] :: [B.ByteString]
   let parsed = parseVcfContent [(Position 5, Position 15), (Position 18, Position 25)] vcf
   let var p = Variant (Chromosome "1") (Position p) (Just $ "name" <> T.pack (show p)) (mkSeq [c]) (mkSeq [a]) (G.fromList [geno00, geno01]) (G.fromList [SampleId "sample1", SampleId "sample2"])
   let expected = Right [var 5, var 12, var 15, var 21]

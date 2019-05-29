@@ -3,32 +3,34 @@
 
 module Vcf (readVcfWithGenotypes, parseVariant, filterOrderedIntervals, parseVcfContent) where
 
---import Protolude hiding (decodeUtf8With)
+import           Data.Text.Encoding (decodeUtf8With)
+import           Data.Text.Encoding.Error (ignore)
+
 import           Data.Text (Text)
-import qualified Data.Text.Read (Reader, decimal)
-import qualified Data.Text.Lazy as TL
+import qualified Data.Text as T
+
 import qualified Codec.Compression.GZip as GZip
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
-import           Data.Text.Lazy.Encoding (decodeUtf8With)
-import           Data.Text.Encoding.Error (ignore)
+import qualified Data.ByteString.Lazy.Char8 as BLC
 import           Data.Either.Combinators (mapLeft)
 import           Data.Char (ord)
 import qualified Data.Vector.Storable as STO
 
-import           Data.Attoparsec.Text
-import qualified Data.Text as T
+import           Data.Attoparsec.ByteString
+import           Data.Attoparsec.ByteString.Char8 (decimal, letter_ascii)
+
 import qualified Data.Vector as V
 import           Control.Monad (guard)
 import           Data.Functor (($>))
 import           Data.Either (rights, fromRight)
 import qualified Data.DList as DList
-import qualified Data.List
+import           Data.Word (Word8)
 
 import Types
 
-readGzippedLines :: FilePath -> IO [Text]
-readGzippedLines path = map TL.toStrict . TL.lines . decodeUtf8With ignore . GZip.decompress <$> BL.readFile path
+readGzippedLines :: FilePath -> IO [B.ByteString]
+readGzippedLines path = map BL.toStrict . BLC.lines . GZip.decompress <$> BL.readFile path
 
 
 filterOrderedIntervals :: Ord a => (b->a) -> [(a,a)] -> [b] -> [b]
@@ -42,24 +44,24 @@ filterOrderedIntervals pos r xs = DList.toList (go r xs)
 readVcfWithGenotypes :: FilePath -> [(Position0, Position0)] -> IO (Either Error [Variant])
 readVcfWithGenotypes path regions = do
     putStrLn ("Loading VCF file " <> path)
-    (parseVcfContent regions . dropWhile ("##" `T.isPrefixOf`)) <$> readGzippedLines path
+    (parseVcfContent regions . dropWhile ("##" `B.isPrefixOf`)) <$> readGzippedLines path
 
-sampleIdsInHeader :: Text -> V.Vector SampleId
-sampleIdsInHeader header = V.fromList $ map SampleId $ drop 9 (T.splitOn "\t" header)
+sampleIdsInHeader :: B.ByteString -> V.Vector SampleId
+sampleIdsInHeader header = V.fromList $ map (SampleId . decodeUtf8With ignore) $ drop 9 (B.split (fromIntegral $ ord '\t') header)
 
 -- Hand tested
 -- The first Variant is parsed by the slow parser in order to check more things. We assume that the other lines will have the same quirks
-parseVcfContent :: [(Position0, Position0)] -> [Text] -> Either Error [Variant]
+parseVcfContent :: [(Position0, Position0)] -> [B.ByteString] -> Either Error [Variant]
 parseVcfContent regions vcfLines = case vcfLines of
     [] -> Left $ ParsingError "Empty vcf file"
-    (header:rest) -> pure $ rights $ case rest of
-                                        [] -> []
-                                        (first:rrest) -> map (parseVariantSlow sampleIdentifiers) (filterOrderedIntervals pos regions [first]) ++ map (parseVariant sampleIdentifiers) (filterOrderedIntervals pos regions rrest) -- TODO: exception for a left
+    (header:rest) -> pure $ rights $ map (parseVariant sampleIdentifiers) (filterOrderedIntervals pos regions rest) -- TODO: exception for a left
         where sampleIdentifiers = sampleIdsInHeader header
-              pos :: T.Text -> Position0
-              pos = Position . (\p -> p - 1) . fromRight (error "Bad position in vcf") . parseInt . T.takeWhile (/='\t') . T.drop 1  . T.dropWhile (/='\t')
-              parseInt = parseOnly (signed decimal)
+              pos :: B.ByteString -> Position0
+              pos = Position . (\p -> p - 1) . fromRight (error "Bad position in vcf") . parseInt . B.takeWhile (/= tab) . B.drop 1  . B.dropWhile (/= tab)
+              parseInt = parseOnly decimal
 
+--digit = satisfy isDigit
+--    where isDigit w = w >= 48 && w <= 57
 
 chromosomeParser :: Parser Chromosome
 chromosomeParser = choice [autosomeParser, xParser, yParser]
@@ -71,70 +73,59 @@ chromosomeParser = choice [autosomeParser, xParser, yParser]
           xParser = string "X" $> Chromosome "X"
           yParser = string "Y" $> Chromosome "Y"
 
-geno00_t1 = T.pack "0/0"
-geno00_t2 = T.pack "0|0"
-geno01_t1 = T.pack "0/1"
-geno01_t2 = T.pack "0|1"
-geno10_t1 = T.pack "1/0"
-geno10_t2 = T.pack "1|0"
-geno11_t1 = T.pack "1/1"
-geno11_t2 = T.pack "1|1"
+geno00_t1, geno00_t2 :: B.ByteString
+geno00_t1 = B.pack (map (fromIntegral . ord) "0/0")
+geno00_t2 = B.pack (map (fromIntegral . ord) "0|0")
 
-geno x | x == geno00_t1 = geno00
-       | x == geno00_t2 = geno00
-       | x == geno01_t1 = geno01
-       | x == geno01_t2 = geno01
-       | x == geno10_t1 = geno10
-       | x == geno10_t2 = geno10
-       | x == geno11_t1 = geno11
-       | x == geno11_t2 = geno11
-       | otherwise = error ("Unsupported genotype" <> show x)
+geno01_t1, geno01_t2 :: B.ByteString
+geno01_t1 = B.pack (map (fromIntegral . ord) "0/1")
+geno01_t2 = B.pack (map (fromIntegral . ord) "0|1")
+
+geno10_t1, geno10_t2 :: B.ByteString
+geno10_t1 = B.pack (map (fromIntegral . ord) "1/0")
+geno10_t2 = B.pack (map (fromIntegral . ord) "1|0")
+
+geno11_t1, geno11_t2 :: B.ByteString
+geno11_t1 = B.pack (map (fromIntegral . ord) "1/1")
+geno11_t2 = B.pack (map (fromIntegral . ord) "1|1")
+
+toGeno :: B.ByteString -> Genotype
+toGeno x | x == geno00_t1 = geno00
+         | x == geno00_t2 = geno00
+         | x == geno01_t1 = geno01
+         | x == geno01_t2 = geno01
+         | x == geno10_t1 = geno10
+         | x == geno10_t2 = geno10
+         | x == geno11_t1 = geno11
+         | x == geno11_t2 = geno11
+         | otherwise = error ("Unsupported genotype" <> show x)
 
 variantIdParser :: Parser (Maybe Text)
 variantIdParser = choice [none, rs] <?> "variant_name"
-    where rs = (Just . T.pack) <$> many1 (notChar '\t')
-          none = char '.' $> Nothing
+    where rs = (Just . decodeUtf8With ignore . B.pack) <$> many1 (notWord8 tab)
+          none = word8 dot $> Nothing
+
+dot, tab, newline :: Word8
+dot = (fromIntegral $ ord '.')
+tab = (fromIntegral $ ord '\t')
+newline = (fromIntegral $ ord '\n')
 
 variantParser :: V.Vector SampleId -> Parser Variant
 variantParser sampleIdentifiers = do
-    chr <- chromosomeParser <* tab
-    pos <- (Position . (\x -> x - 1)) <$> decimal <* tab
-    name <- variantIdParser <* tab
-    ref <- (B.pack . map (unNuc . toNuc . fromIntegral . ord)) <$> many1 letter <* tab
-    alt <- (B.pack . map (unNuc . toNuc . fromIntegral . ord))  <$> many1 letter <* tab
+    chr <- chromosomeParser <* word8 tab
+    pos <- (Position . (\x -> x - 1)) <$> decimal <* word8 tab
+    name <- variantIdParser <* word8 tab
+    ref <- (B.pack . map (unNuc . toNuc . fromIntegral . ord)) <$> many1 letter_ascii <* word8 tab
+    alt <- (B.pack . map (unNuc . toNuc . fromIntegral . ord))  <$> many1 letter_ascii <* word8 tab
     skipField >> skipField >> skipField >> skipField
-    geno <- (STO.fromListN (V.length sampleIdentifiers) . map geno . T.split (=='\t')) <$> takeWhile1 (/='\n')
+    geno <- STO.fromListN (V.length sampleIdentifiers) . map toGeno . B.split tab <$> takeWhile1 (/=newline)
     guard $ STO.length geno == V.length sampleIdentifiers
-    _ <- option '0' (char '\n')
+    _ <- option newline (word8 newline)
     return $ Variant chr pos name ref alt geno sampleIdentifiers
   where
-    skipField = skipWhile (/= '\t') >> skip (== '\t')
-    tab = skip (== '\t')
+    skipField = skipWhile (/= tab) >> skip (== tab)
 
-parseVariantSlow :: V.Vector SampleId -> Text -> Either Error (Variant)
-parseVariantSlow sampleIdentifiers s = 
-    mapLeft (ParsingError . (\e -> s <> " " <> T.pack e)) (parseOnly (variantParser sampleIdentifiers) s) 
+parseVariant :: V.Vector SampleId -> B.ByteString -> Either Error (Variant)
+parseVariant sampleIdentifiers s = 
+    mapLeft (ParsingError . (\e -> (decodeUtf8With ignore s) <> " " <> T.pack e)) (parseOnly (variantParser sampleIdentifiers) s) 
 
-parseVariant :: V.Vector SampleId -> Text -> Either Error (Variant)
-parseVariant sampleIdentifiers s =
-    case Data.List.take 5 fields of
-         [chr, pos, name, ref, alt] -> go chr pos name ref alt (drop 9 fields)
-         _ -> error ("Wrong number of fields in VCF")
- where fields = T.split (=='\t') s
-       go ch p na r al gen =
-            let chr = if T.isPrefixOf "chr" ch then Chromosome (T.drop 3 ch) else Chromosome ch
-                pos = Position (unsafeReadInt p - 1)
-                name = if na == "." then Nothing else Just na
-                ref = (B.pack . map (unNuc . toNuc . fromIntegral . ord) . T.unpack) r
-                alt = (B.pack . map (unNuc . toNuc . fromIntegral . ord) . T.unpack) al
-                g = STO.fromListN (V.length sampleIdentifiers) $ map geno gen
-            in Right $ Variant chr pos name ref alt g sampleIdentifiers
-
-
-unsafeRead :: Data.Text.Read.Reader a -> Text -> a
-unsafeRead = (value .)
-  where
-    value (Right (v,_)) = v
-
-unsafeReadInt :: Text -> Int
-unsafeReadInt = unsafeRead Data.Text.Read.decimal

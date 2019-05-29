@@ -120,11 +120,11 @@ parseVariant sampleIdentifiers s =
     case Data.List.take 5 fields of
          [chr, pos, name, ref, alt] -> go chr pos name ref alt (drop 9 fields)
          _ -> error ("Wrong number of fields in VCF")
- where fields = T.splitOn "\t" s
-       go c p n r al gen =
-            let chr = if T.isPrefixOf "chr" c then Chromosome (T.drop 3 c) else Chromosome c
+ where fields = T.split (=='\t') s
+       go ch p na r al gen =
+            let chr = if T.isPrefixOf "chr" ch then Chromosome (T.drop 3 ch) else Chromosome ch
                 pos = Position (unsafeReadInt p - 1)
-                name = if n == "." then Nothing else Just n
+                name = if na == "." then Nothing else Just na
                 ref = (B.pack . map (unNuc . toNuc . fromIntegral . ord) . T.unpack) r
                 alt = (B.pack . map (unNuc . toNuc . fromIntegral . ord) . T.unpack) al
                 g = STO.fromListN (V.length sampleIdentifiers) $ map geno gen

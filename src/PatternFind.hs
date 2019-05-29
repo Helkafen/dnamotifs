@@ -70,8 +70,8 @@ C.include "<string.h>"
 
 foreign import ccall "&free" freePtr :: FunPtr (Ptr CInt-> IO ())
 
-findPatterns :: CInt -> CInt -> B.ByteString -> Vector CInt -> Vector CInt -> Ptr CInt -> IO (Ptr CInt)
-findPatterns sample_size block_size vec pos pat res_size = [C.block| int* {
+findPatterns :: CInt -> CInt -> CInt -> B.ByteString -> Vector CInt -> Vector CInt -> Ptr CInt -> IO (Ptr CInt)
+findPatterns min_score sample_size block_size vec pos pat res_size = [C.block| int* {
     typedef struct Match {
         int score;
         int pattern;
@@ -89,6 +89,7 @@ findPatterns sample_size block_size vec pos pat res_size = [C.block| int* {
         int matched[30];
     } MatchRecord;
 
+    int min_score = $(int min_score);
     int sample_size = $(int sample_size);
     int block_size = $(int block_size);
     int* patterns = $vec-ptr:(int *pat);
@@ -133,7 +134,7 @@ findPatterns sample_size block_size vec pos pat res_size = [C.block| int* {
                 }
 
                 int score = (1000 * score_inter) / score_union;
-                if(score >= 900) {
+                if(score >= min_score) {
                     struct Match *match = malloc (sizeof (struct Match));
                     if (match == 0) {
                         printf("Failed malloc for a Match\n");
@@ -201,10 +202,10 @@ findPatterns sample_size block_size vec pos pat res_size = [C.block| int* {
     } |]
 
 
-findPatternsInBlock :: NucleotideAndPositionBlock -> Patterns -> IO [Match]
-findPatternsInBlock (NucleotideAndPositionBlock numberOfPeople block_size inputData positionData) (Patterns patternData) = do
+findPatternsInBlock :: Int -> NucleotideAndPositionBlock -> Patterns -> IO [Match]
+findPatternsInBlock minScore (NucleotideAndPositionBlock numberOfPeople block_size inputData positionData) (Patterns patternData) = do
     result <- alloca $ \n_ptr -> do
-        x <- findPatterns (fromIntegral numberOfPeople) (fromIntegral block_size) inputData positionData patternData (n_ptr :: Ptr CInt)
+        x <- findPatterns (fromIntegral minScore) (fromIntegral numberOfPeople) (fromIntegral block_size) inputData positionData patternData (n_ptr :: Ptr CInt)
         result_size <- peek n_ptr
         fptr <- newForeignPtr freePtr x
         print ("result_size", result_size)

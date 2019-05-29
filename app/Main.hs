@@ -36,7 +36,7 @@ patterns = mkPatterns $ [pattern_CG, pattern_cCGA, pattern_CGA] ++ replicate 50 
 
 bench :: IO ()
 bench = do
-    matches <- findPatternsInBlock (mkNucleotideAndPositionBlock inputData) patterns
+    matches <- findPatternsInBlock 500 (mkNucleotideAndPositionBlock inputData) patterns
     print (expected == matches)
   where numberOfPeople = 10000 :: Int
 
@@ -72,13 +72,13 @@ main = do
         --LMO2 GATA6 CEBPG MESP1 MESP2 ID3 ID4 TCF12 TCF4 STAT1 CEBPE SPIC CTCF IRF1 STAT2 DBP MAFK ATF4 ASCL1 TCF3 MYOD1 ATOH8 MECOM ASCL2 IRF3 ZEB1 IRF9 NHLH1 LYL1
         --x    Gata6                           Tcf12 Tcf4 STAT1            CTCF IRF1           MafK Atf4 Ascl1 Tcf3 
         wantedPatterns <- (mkPatterns . map snd . filter ((`elem` patternNames) . fst)) <$> loadMotifs "homer.motifs"
-        _ <- findPatterns (Chromosome "1") patterns "chr1.bed" "hg38.fa" "chr1.vcf.gz" "resultFile.tab"
+        _ <- findPatterns (Chromosome "1") patterns 900 "chr1.bed" "hg38.fa" "chr1.vcf.gz" "resultFile.tab"
         t2 <- getPOSIXTime
         print (round $ (t2 - t1) * 1000 :: Integer) -- milliseconds
         pure ()
       [chrom, referenceGenomeFastaFile, motifFile, peakBedFile, vcfFile, outputFile] -> do
         wantedPatterns <- (mkPatterns . map snd . filter ((`elem` patternNames) . fst)) <$> loadMotifs motifFile
-        _ <- findPatterns (Chromosome $ T.pack chrom) wantedPatterns peakBedFile referenceGenomeFastaFile vcfFile outputFile
+        _ <- findPatterns (Chromosome $ T.pack chrom) wantedPatterns 900 peakBedFile referenceGenomeFastaFile vcfFile outputFile
         pure ()
       _ -> print ("Usage: xxx" :: String)
       

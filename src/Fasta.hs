@@ -17,7 +17,6 @@ import Types
 loadFasta :: Chromosome -> FilePath -> IO (Int -> Int -> BaseSequencePosition, Int)
 loadFasta (Chromosome chr) filename = 
     do putStr ("Load reference genome " <> filename <> " ... ")
-       print wantedHeader
        -- BL.head is safe because we filtered out the empty lines earlier
        alphaBaseSequence <- (BL.toStrict . BL.concat . takeWhile (\l -> BL.head l /= separator) . tail . dropWhile (/=wantedHeader) . filter (not . BL.null) . BLC.lines) <$> BL.readFile filename
        if B.length alphaBaseSequence == 0

@@ -5,6 +5,7 @@ module Vcf (readVcfWithGenotypes, parseVariant, filterOrderedIntervals, parseVcf
 
 --import Protolude hiding (decodeUtf8With)
 import           Data.Text (Text)
+import qualified Data.Text.Read (Reader, decimal)
 import qualified Data.Text.Lazy as TL
 import qualified Codec.Compression.GZip as GZip
 import qualified Data.ByteString as B
@@ -22,6 +23,7 @@ import           Control.Monad (guard)
 import           Data.Functor (($>))
 import           Data.Either (rights, fromRight)
 import qualified Data.DList as DList
+import qualified Data.List
 
 import Types
 
@@ -46,10 +48,13 @@ sampleIdsInHeader :: Text -> V.Vector SampleId
 sampleIdsInHeader header = V.fromList $ map SampleId $ drop 9 (T.splitOn "\t" header)
 
 -- Hand tested
+-- The first Variant is parsed by the slow parser in order to check more things. We assume that the other lines will have the same quirks
 parseVcfContent :: [(Position0, Position0)] -> [Text] -> Either Error [Variant]
 parseVcfContent regions vcfLines = case vcfLines of
     [] -> Left $ ParsingError "Empty vcf file"
-    (header:rest) -> pure $ rights $ map (parseVariant sampleIdentifiers) (filterOrderedIntervals pos regions rest) -- TODO: exception for a left
+    (header:rest) -> pure $ rights $ case rest of
+                                        [] -> []
+                                        (first:rrest) -> map (parseVariantSlow sampleIdentifiers) (filterOrderedIntervals pos regions [first]) ++ map (parseVariant sampleIdentifiers) (filterOrderedIntervals pos regions rrest) -- TODO: exception for a left
         where sampleIdentifiers = sampleIdsInHeader header
               pos :: T.Text -> Position0
               pos = Position . (\p -> p - 1) . fromRight (error "Bad position in vcf") . parseInt . T.takeWhile (/='\t') . T.drop 1  . T.dropWhile (/='\t')
@@ -106,5 +111,30 @@ variantParser sampleIdentifiers = do
     skipField = skipWhile (/= '\t') >> skip (== '\t')
     tab = skip (== '\t')
 
+parseVariantSlow :: V.Vector SampleId -> Text -> Either Error (Variant)
+parseVariantSlow sampleIdentifiers s = 
+    mapLeft (ParsingError . (\e -> s <> " " <> T.pack e)) (parseOnly (variantParser sampleIdentifiers) s) 
+
 parseVariant :: V.Vector SampleId -> Text -> Either Error (Variant)
-parseVariant sampleIdentifiers s = mapLeft (ParsingError . (\e -> s <> " " <> T.pack e)) (parseOnly (variantParser sampleIdentifiers) s)
+parseVariant sampleIdentifiers s =
+    case Data.List.take 5 fields of
+         [chr, pos, name, ref, alt] -> go chr pos name ref alt (drop 9 fields)
+         _ -> error ("Wrong number of fields in VCF")
+ where fields = T.splitOn "\t" s
+       go c p n r al gen =
+            let chr = if T.isPrefixOf "chr" c then Chromosome (T.drop 3 c) else Chromosome c
+                pos = Position (unsafeReadInt p - 1)
+                name = if n == "." then Nothing else Just n
+                ref = (B.pack . map (unNuc . toNuc . fromIntegral . ord) . T.unpack) r
+                alt = (B.pack . map (unNuc . toNuc . fromIntegral . ord) . T.unpack) al
+                g = STO.fromListN (V.length sampleIdentifiers) $ map geno gen
+            in Right $ Variant chr pos name ref alt g sampleIdentifiers
+
+
+unsafeRead :: Data.Text.Read.Reader a -> Text -> a
+unsafeRead = (value .)
+  where
+    value (Right (v,_)) = v
+
+unsafeReadInt :: Text -> Int
+unsafeReadInt = unsafeRead Data.Text.Read.decimal

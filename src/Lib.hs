@@ -70,8 +70,8 @@ variantsToDiffs haplo variants i = case haplo of
     --              HaploRight -> [geno01, geno11]
     --in 
 
-findPatterns :: Chromosome -> Patterns -> FilePath -> FilePath -> FilePath -> FilePath -> IO Bool
-findPatterns chr patterns peakFile referenceGenomeFile vcfFile resultFile = do
+findPatterns :: Chromosome -> Patterns -> Int -> FilePath -> FilePath -> FilePath -> FilePath -> IO Bool
+findPatterns chr patterns minScore peakFile referenceGenomeFile vcfFile resultFile = do
     (takeReferenceGenome, referenceGenomeSize) <- loadFasta chr referenceGenomeFile
     TIO.putStrLn $ "Chromosome " <> unChr chr <> " : " <> T.pack (show referenceGenomeSize) <> " bases"
     --patterns <- loadPatterns ""
@@ -103,7 +103,7 @@ findPatterns chr patterns peakFile referenceGenomeFile vcfFile resultFile = do
                         -- The actual scan
                         let block = mkNucleotideAndPositionBlock (map (applyVariants takeReferenceGenome peakStart peakEnd) uniqueDiffs)
                         putStr $ (blockInfo block <> (", for " <> show (V.length (sampleIds x)) <> " people"))
-                        matches <- findPatternsInBlock block patterns
+                        matches <- findPatternsInBlock minScore block patterns
                         --print matches
 
                         -- Recover the [(SampleId, Haplotype)] of each match and print

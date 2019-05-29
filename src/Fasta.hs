@@ -29,19 +29,6 @@ loadFasta (Chromosome chr) filename = do putStrLn ("Load reference genome " <> f
 takeRef :: B.ByteString -> Int -> Int -> BaseSequencePosition
 takeRef referenceGenome s e = BaseSequencePosition bases positions
     where end = minimum [e, B.length referenceGenome - 1]
-          bases = B.map toNuc $ B.take (end-s+1) (B.drop s referenceGenome)
+          bases = B.map (unNuc . toNuc) $ B.take (end-s+1) (B.drop s referenceGenome)
           positions = STO.fromListN (end-s+1) (map fromIntegral [s..end+1])
 
--- ACGTacgtNn -> 01234
-toNuc :: Word8 -> Word8
-toNuc 65 = a
-toNuc 67 = c
-toNuc 71 = g
-toNuc 84 = t
-toNuc 78 = n
-toNuc 97 = a
-toNuc 99 = c
-toNuc 103 = g
-toNuc 116 = t
-toNuc 110 = n
-toNuc other = error $ "Bad nucleotide " <> show other

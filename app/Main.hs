@@ -16,13 +16,13 @@ import Lib (findPatterns)
 import MotifDefinition (loadMotifs)
 
 inputDataSample0 :: B.ByteString
-inputDataSample0 = B.pack [a,a,a,a,c,g,a] <> B.replicate 93 a
+inputDataSample0 = B.pack (map unNuc [a,a,a,a,c,g,a]) <> B.replicate 93 (unNuc a)
 
 inputDataSample1 :: B.ByteString
-inputDataSample1 = B.pack [c,g,a,a,a,a,a] <> B.replicate 93 a
+inputDataSample1 = B.pack (map unNuc [c,g,a,a,a,a,a]) <> B.replicate 93 (unNuc a)
 
 inputDataSample2 :: B.ByteString
-inputDataSample2 = B.pack [a,a,a,a,a,a,a] <> B.replicate 93 a
+inputDataSample2 = B.pack (map unNuc [a,a,a,a,a,a,a]) <> B.replicate 93 (unNuc a)
 
 pattern_CG, pattern_cCGA, pattern_CGA, pattern_cccccccccc :: [Pweight]
 pattern_CG = [Pweight 0 1 0 0, Pweight 0 0 1 0]

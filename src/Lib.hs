@@ -47,13 +47,27 @@ applyVariants takeReferenceGenome (Position start) (Position end) allDiffs =
 loadPatterns :: FilePath -> IO Patterns
 loadPatterns _ = return $ mkPatterns []
 
+hasVariantLeft geno00 = False
+hasVariantLeft geno10 = True
+hasVariantLeft geno11 = True
+hasVariantLeft geno01 = False
+hasVariantLeft _ = error "Bad geno"
+
+hasVariantRight geno00 = False
+hasVariantRight geno01 = True
+hasVariantRight geno11 = True
+hasVariantRight geno10 = False
+hasVariantRight _ = error "Bad geno"
+
 variantsToDiffs :: Haplotype -> [Variant] -> Int -> [Diff]
 variantsToDiffs _ [] _ = []
-variantsToDiffs haplo variants i = 
-    let ge = case haplo of
-                  HaploLeft -> [geno10, geno11]
-                  HaploRight -> [geno01, geno11]
-    in [Diff (position v) (reference v) (alternative v) | v <- variants, (STO.!) (genotypes v) i `elem` ge ]
+variantsToDiffs haplo variants i = case haplo of
+    HaploLeft  -> [Diff (position v) (reference v) (alternative v) | v <- variants, hasVariantLeft  ((STO.!) (genotypes v) i) ]
+    HaploRight -> [Diff (position v) (reference v) (alternative v) | v <- variants, hasVariantRight ((STO.!) (genotypes v) i) ]
+    --let ge = case haplo of
+    --              HaploLeft -> [geno10, geno11]
+    --              HaploRight -> [geno01, geno11]
+    --in 
 
 findPatterns :: Chromosome -> Patterns -> FilePath -> FilePath -> FilePath -> FilePath -> IO Bool
 findPatterns chr patterns peakFile referenceGenomeFile vcfFile resultFile = do

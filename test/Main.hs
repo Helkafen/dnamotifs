@@ -11,6 +11,7 @@ import qualified Data.Text                       as T
 import qualified Data.ByteString                 as B
 import           Foreign.C.Types                 (CInt)
 import           Data.Text.Encoding              (encodeUtf8)
+import qualified Data.Map
 
 import Types
 import PatternFind
@@ -252,6 +253,31 @@ test_motif_parser_1 = do
                                , Pweight{wa = 1.0e-3, wc = 0.947, wg = 1.0e-3, wt = 5.1e-2}])
 
   assertEqual (Right [expected1, expected2]) parsed
+
+test_variantsToDiffs_1 :: IO ()
+test_variantsToDiffs_1 = do
+  let sampleIdentifiers = G.fromList [SampleId "sample1", SampleId "sample2"]
+  let variant = Variant (Chromosome "1") (Position 69080) (Just "1:69081:G:C") (mkSeq [c]) (mkSeq [g]) (G.fromList [geno10, geno01]) sampleIdentifiers
+  let diffs = variantsToDiffs [variant]
+  let expected = Data.Map.fromList [((0,HaploLeft), V.fromList [Diff (Position 69080) (mkSeq [c]) (mkSeq [g])])
+                                   ,((1,HaploRight),V.fromList [Diff (Position 69080) (mkSeq [c]) (mkSeq [g])])] :: Data.Map.Map (Int, Haplotype) (V.Vector Diff)
+  assertEqual expected diffs
+
+test_variantsToDiffs_2 :: IO ()
+test_variantsToDiffs_2 = do
+  let sampleIdentifiers = G.fromList [SampleId "sample1", SampleId "sample2"]
+  let variant1 = Variant (Chromosome "1") (Position 69080) (Just "1:69081:G:C") (mkSeq [c]) (mkSeq [g]) (G.fromList [geno10, geno01]) sampleIdentifiers
+  let variant2 = Variant (Chromosome "1") (Position 69079) (Just "1:69079:A:T") (mkSeq [a]) (mkSeq [t]) (G.fromList [geno10, geno00]) sampleIdentifiers
+  let variant3 = Variant (Chromosome "1") (Position 69078) (Just "1:69078:T:G") (mkSeq [t]) (mkSeq [g]) (G.fromList [geno01, geno00]) sampleIdentifiers
+  let diffs = variantsToDiffs [variant1, variant2, variant3]
+  let diff1 = Diff (Position 69080) (mkSeq [c]) (mkSeq [g])
+  let diff2 = Diff (Position 69079) (mkSeq [a]) (mkSeq [t])
+  let diff3 = Diff (Position 69080) (mkSeq [c]) (mkSeq [g])
+  let diff4 = Diff (Position 69078) (mkSeq [t]) (mkSeq [g])
+  let expected = Data.Map.fromList [((0,HaploLeft), V.fromList [diff2, diff1]) -- Order of positions must be increasing
+                                   ,((0,HaploRight), V.fromList [diff4])
+                                   ,((1,HaploRight),V.fromList [diff3])] :: Data.Map.Map (Int, Haplotype) (V.Vector Diff)
+  assertEqual expected diffs
 
 main :: IO ()
 main = 

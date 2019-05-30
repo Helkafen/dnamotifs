@@ -28,7 +28,7 @@ import           GHC.Generics
 import           TextShow
 
 data Haplotype = HaploLeft | HaploRight
-    deriving (Eq, Show)
+    deriving (Eq, Ord, Show)
 
 data Pweight = Pweight {
     wa :: Float,
@@ -114,6 +114,9 @@ newtype Position0 = Position Int
 -- The ID of a person
 newtype SampleId = SampleId Text
   deriving (Eq, Ord, Show)
+
+instance TextShow SampleId where
+  showb (SampleId s) = showb s
 
 
 -- 0-based (not like in a VCF, which is 1-based)

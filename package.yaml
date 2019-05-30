@@ -28,6 +28,7 @@ dependencies:
 - derive-storable
 - derive-storable-plugin
 - text-show
+- vector-algorithms
 
 ghc-options:
   - -Wall

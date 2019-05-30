@@ -8,6 +8,7 @@ import qualified Data.Map
 import qualified Data.List
 import qualified Data.Set as Set
 import qualified Data.Vector as V
+import           Data.Vector.Algorithms.Merge (sort)
 import qualified Data.Vector.Storable as STO
 import qualified Data.ByteString as B
 import qualified Data.Text as T
@@ -63,9 +64,8 @@ hasVariantRight x | x == geno00 = False
 
 
 variantsToDiffs :: [Variant] -> Data.Map.Map (Int, Haplotype) (V.Vector Diff)
-variantsToDiffs variants = fmap (V.fromList . Data.List.sortOn diffPos) $ Data.Map.fromListWith (<>) (V.toList $ V.map (\(i, h, d) -> ((i,h), [d])) allDiffs)
+variantsToDiffs variants = fmap (V.modify sort) $ Data.Map.fromListWith (<>) (V.toList $ V.map (\(i, h, d) -> ((i,h), V.singleton d)) allDiffs)
     where allDiffs = V.concatMap variantToDiffs (V.fromList variants) :: V.Vector (Int, Haplotype, Diff)
-          diffPos (Diff p ref alt) = (p, ref, alt) -- Only p would be necessary if we had unicity on p. Do we?
 
 
 variantToDiffs :: Variant -> V.Vector (Int, Haplotype, Diff)
@@ -155,7 +155,7 @@ processPeak chr minScore patterns takeReferenceGenome samples (peakStart, peakEn
     -- The actual scan
     let noDiff = []
     let block = mkNucleotideAndPositionBlock (map (applyVariants takeReferenceGenome peakStart peakEnd) ((V.toList <$> uniqueDiffs) ++ noDiff))
-    let numberOfHaplotypes = length uniqueDiffs
+    let numberOfHaplotypes = length uniqueDiffs + 1 -- 1 for the reference haplotype
     matches <- findPatternsInBlock minScore block patterns
 
     -- Recover the [(SampleId, Haplotype)] of each match and print

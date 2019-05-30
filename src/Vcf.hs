@@ -26,6 +26,7 @@ import           Data.Functor (($>))
 import           Data.Either (rights, fromRight)
 import qualified Data.DList as DList
 import           Data.Word (Word8)
+import Debug.Trace (traceShow)
 
 import Types
 
@@ -100,6 +101,7 @@ toGeno x | x == geno00_t1 = geno00
          | x == geno11_t2 = geno11
          | otherwise = error ("Unsupported genotype" <> show x)
 
+
 variantIdParser :: Parser (Maybe Text)
 variantIdParser = choice [none, rs] <?> "variant_name"
     where rs = (Just . decodeUtf8With ignore . B.pack) <$> many1 (notWord8 tab)
@@ -118,12 +120,23 @@ variantParser sampleIdentifiers = do
     ref <- (B.pack . map (unNuc . toNuc . fromIntegral . ord)) <$> many1 letter_ascii <* word8 tab
     alt <- (B.pack . map (unNuc . toNuc . fromIntegral . ord))  <$> many1 letter_ascii <* word8 tab
     skipField >> skipField >> skipField >> skipField
-    geno <- STO.fromListN (V.length sampleIdentifiers) . map toGeno . B.split tab <$> takeWhile1 (/=newline)
+    geno <- fillVector (V.length sampleIdentifiers) <$> takeWhile1 (/=newline)
     guard $ STO.length geno == V.length sampleIdentifiers
     _ <- option newline (word8 newline)
     return $ Variant chr pos name ref alt geno sampleIdentifiers
   where
     skipField = skipWhile (/= tab) >> skip (== tab)
+
+
+fillVector :: Int -> B.ByteString -> STO.Vector Genotype
+fillVector size str = let updates = go 0 str
+                      in STO.unsafeCast $ (STO.//) (STO.replicate size geno00) updates
+  where go :: Int -> B.ByteString -> [(Int, Genotype)]
+        go i b = let x = B.take 3 b
+                 in if B.length x /= 3
+                      then []
+                      else (i,toGeno x):go (i+1) (B.drop 4 b)
+
 
 parseVariant :: V.Vector SampleId -> B.ByteString -> Either Error (Variant)
 parseVariant sampleIdentifiers s = 

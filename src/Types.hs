@@ -140,7 +140,7 @@ showBaseSequence = map tr . B.unpack
         tr _ = '_'
 
 data Diff = Diff !Position0 !BaseSequence !BaseSequence -- pos, ref, alt
-  deriving (Eq, Ord)
+  deriving (Eq, Ord) -- Keep Position in the first place. We need it for the default ordering
 
 instance Show Diff where
   show (Diff (Position p) ref alt) = "Diff " <> show p <> ": " <> showBaseSequence ref <> "->" <> showBaseSequence alt

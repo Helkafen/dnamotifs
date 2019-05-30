@@ -5,6 +5,7 @@
 module Lib where
 
 import qualified Data.Map
+import qualified Data.List
 import qualified Data.Set as Set
 import qualified Data.Vector as V
 import qualified Data.Vector.Storable as STO
@@ -12,14 +13,15 @@ import qualified Data.ByteString as B
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import           Control.Monad (forM_)
-import           System.IO (appendFile)
+--import           System.IO (appendFile)
 import           TextShow (showt)
+import           Data.Time.Clock.POSIX (getPOSIXTime, POSIXTime)
 
 import Types
 import Bed (readPeaks)
 import Fasta (loadFasta)
 import Vcf (readVcfWithGenotypes)
-import PatternFind (findPatternsInBlock, mkPatterns, mkNucleotideAndPositionBlock, Patterns, blockInfo)
+import PatternFind (findPatternsInBlock, mkPatterns, mkNucleotideAndPositionBlock, Patterns)
 
 
 -- Inclusive [Start, End] interval
@@ -81,43 +83,86 @@ findPatterns chr patterns minScore peakFile referenceGenomeFile vcfFile resultFi
                 Left err -> print err >> return False
                 Right [] -> print ("No variant loaded" :: String) >> return False
                 Right variants@(x:_) -> do
-                    let sampleIndexes = V.iterateN (V.length (sampleIds x)) (+1) 0 :: V.Vector Int
+                    let sampleIdList = sampleIds x
+                    putStrLn $ "Population: " <> show (V.length sampleIdList)
+                    let sampleIndexes = V.iterateN (V.length sampleIdList) (+1) 0 :: V.Vector Int
                     let sampleIndexesTwoHaplotypes = sampleIndexes <> sampleIndexes
-                    forM_ peaks $ \(peakStart, peakEnd) -> do
-                        let variantsInPeak = takeWhile (\v -> position v <= peakEnd) $ dropWhile (\v -> position v < peakStart) variants
-                        let diffs = V.map (variantsToDiffs HaploLeft variantsInPeak <> variantsToDiffs HaploRight variantsInPeak) sampleIndexesTwoHaplotypes
-
-                        -- We don't want to generate and scan the same haplotypes n times in a large population, so
-                        -- we put the unique haplotypes in an array, scan that array, then use the indices (mSampleId) 
-                        -- of each Match to recover the [(SampleId, Haplotype)] of origin
-                        let uniqueDiffs = Set.toList $ Set.fromList (V.toList diffs)
-                        let numberOfUniqueSequences = length uniqueDiffs
-                        let haplotypeIds = V.map (,HaploLeft) (sampleIds x) <> V.map (,HaploRight) (sampleIds x) :: V.Vector (SampleId, Haplotype)
-
-                        -- Just some book keeping
-                        let m = Data.Map.fromListWith (++) (zip (V.toList diffs) (map (:[]) (V.toList haplotypeIds))) :: Data.Map.Map [Diff] [(SampleId, Haplotype)]
-
-                        -- The actual scan
-                        let block = mkNucleotideAndPositionBlock (map (applyVariants takeReferenceGenome peakStart peakEnd) uniqueDiffs)
-                        putStr $ (blockInfo block <> (", for " <> show (V.length (sampleIds x)) <> " people"))
-                        matches <- findPatternsInBlock minScore block patterns
-                        --print matches
-
-                        -- Recover the [(SampleId, Haplotype)] of each match and print
-                        forM_ matches $ \match -> do
-                            let diffsOfMatch = uniqueDiffs !! mSampleId match :: [Diff]
-                            let haploIdsOfMatch = Data.Map.findWithDefault (error "Coding error: should find indices") diffsOfMatch m :: [(SampleId, Haplotype)]
-                            let strings = map (formatMatch chr peakStart peakEnd match) haploIdsOfMatch :: [T.Text]
-                            if (length strings == -1)
-                                then print strings
-                                else pure()
-                            --appendFile resultFile (Data.List.concat strings)
-                            --putStrLn ("No append" :: String)
-                            pure ()
-
+                    t0 <- getPOSIXTime
+                    processPeaks t0 chr minScore patterns takeReferenceGenome sampleIndexesTwoHaplotypes sampleIdList (zip [1..] peaks) variants 
                     return True
 
--- Perf: 2.8   10.9 (from forM_ block)
+processPeaks :: POSIXTime
+             -> Chromosome
+             -> Int
+             -> Patterns
+             -> (Int -> Int -> BaseSequencePosition)
+             -> V.Vector Int
+             -> V.Vector SampleId
+             -> [(Int, (Position0, Position0))]
+             -> [Variant]
+             -> IO ()
+processPeaks _ _ _ _ _ _ _ [] _ = pure ()
+processPeaks t0 chr minScore patterns takeReferenceGenome sampleIndexesTwoHaplotypes sampleIdList ((peakId, peak):xs) variants = do
+    t1 <- getPOSIXTime
+    (nextVariants, numberOfHaplotypes, numberOfVariants, numberOfMatches) <- processPeak chr minScore patterns takeReferenceGenome sampleIndexesTwoHaplotypes sampleIdList peak variants
+    t2 <- getPOSIXTime
+    putStrLn $ formatStatus t0 t1 t2 peakId (length xs + peakId) numberOfHaplotypes numberOfVariants numberOfMatches
+    processPeaks t0 chr minScore patterns takeReferenceGenome sampleIndexesTwoHaplotypes sampleIdList xs nextVariants
+
+formatStatus :: POSIXTime -> POSIXTime -> POSIXTime -> Int -> Int -> Int -> Int -> Int -> String
+formatStatus t0 t1 t2 peakId totalPeakNumber numberOfHaplotypes numberOfVariants numberOfMatches = 
+    Data.List.intercalate " \t" [peakNumberString, timeString, haploString, variantsString, matchesString]
+    where peakTime = round $ (t2 - t1) * 1000 :: Integer
+          totalTime = round $ (t2 - t0) * 1000 :: Integer
+          peakNumberString = "Peak " <> show peakId <> "/" <> show totalPeakNumber
+          timeString = show peakTime <> " ms (" <> show totalTime <> " total)"
+          haploString = show numberOfHaplotypes <> " haplotypes"
+          variantsString = show numberOfVariants <> " variants"
+          matchesString = show numberOfMatches <> " matches"
+
+processPeak :: Chromosome
+            -> Int
+            -> Patterns
+            -> (Int -> Int -> BaseSequencePosition)
+            -> V.Vector Int
+            -> V.Vector SampleId
+            -> (Position0, Position0)
+            -> [Variant]
+            -> IO ([Variant], Int, Int, Int)
+processPeak chr minScore patterns takeReferenceGenome sampleIndexesTwoHaplotypes sampleIdList (peakStart, peakEnd) variants = do
+    let (variantsInPeak, nextVariants) = Data.List.span (\v -> position v <= peakEnd) $ dropWhile (\v -> position v < peakStart) variants
+    let numberOfVariants = length variantsInPeak
+    let diffs = V.map (variantsToDiffs HaploLeft variantsInPeak <> variantsToDiffs HaploRight variantsInPeak) sampleIndexesTwoHaplotypes
+    
+    -- We don't want to generate and scan the same haplotypes n times in a large population, so
+    -- we put the unique haplotypes in an array, scan that array, then use the indices (mSampleId) 
+    -- of each Match to recover the [(SampleId, Haplotype)] of origin
+    let uniqueDiffs = Set.toList $ Set.fromList (V.toList diffs)
+    let haplotypeIds = V.map (,HaploLeft) sampleIdList <> V.map (,HaploRight) sampleIdList :: V.Vector (SampleId, Haplotype)
+
+    -- Just some book keeping
+    let m = Data.Map.fromListWith (++) (zip (V.toList diffs) (map (:[]) (V.toList haplotypeIds))) :: Data.Map.Map [Diff] [(SampleId, Haplotype)]
+
+    -- The actual scan
+    let block = mkNucleotideAndPositionBlock (map (applyVariants takeReferenceGenome peakStart peakEnd) uniqueDiffs)
+    let numberOfHaplotypes = length $ Data.Map.keys m
+    matches <- findPatternsInBlock minScore block patterns
+
+    -- Recover the [(SampleId, Haplotype)] of each match and print
+    forM_ (V.toList matches) $ \match -> do
+        let diffsOfMatch = uniqueDiffs !! mSampleId match :: [Diff]
+        let haploIdsOfMatch = Data.Map.findWithDefault (error "Coding error: should find indices") diffsOfMatch m :: [(SampleId, Haplotype)]
+        let strings = map (formatMatch chr peakStart peakEnd match) haploIdsOfMatch :: [T.Text]
+        if (length strings == -1)
+            then print strings
+            else pure()
+        --appendFile resultFile (Data.List.concat strings)
+        --putStrLn ("No append" :: String)
+        pure ()
+    
+    pure (nextVariants, numberOfHaplotypes, numberOfVariants, V.length matches)
+
+
 formatMatch :: Chromosome -> Position0 -> Position0 -> Match -> (SampleId, Haplotype) -> T.Text
 formatMatch (Chromosome chr) (Position peakStart) (Position peakStop) (Match patId score pos _ matched) (SampleId sample, haplo) =
     T.intercalate "\t" [chr

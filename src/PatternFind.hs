@@ -7,24 +7,24 @@ import           Foreign                         (Ptr, alloca, peek, FunPtr)
 import           Foreign.ForeignPtr              (newForeignPtr)
 import           Foreign.C.Types                 (CInt)
 import qualified Language.C.Inline               as C
-import           Data.Vector.Storable            (Vector)
-import qualified Data.Vector.Storable            as V
+import qualified Data.Vector.Storable            as STO
+import qualified Data.Vector                     as V
 import qualified Data.ByteString                 as B
 import           Data.Monoid                     ((<>))
 import           Data.Maybe                      (mapMaybe)
 
 import Types
 
-newtype Patterns = Patterns (Vector CInt)
+newtype Patterns = Patterns (STO.Vector CInt)
 
 -- numberOfPeople, blockSize, nucleotides, positions
-data NucleotideAndPositionBlock = NucleotideAndPositionBlock {-# UNPACK #-}!Int {-# UNPACK #-}!Int {-# UNPACK #-}!B.ByteString {-# UNPACK #-}!(Vector CInt)
+data NucleotideAndPositionBlock = NucleotideAndPositionBlock {-# UNPACK #-}!Int {-# UNPACK #-}!Int {-# UNPACK #-}!B.ByteString {-# UNPACK #-}!(STO.Vector CInt)
 
 blockInfo :: NucleotideAndPositionBlock -> String
-blockInfo (NucleotideAndPositionBlock numberOfPeople blockSize _ positions) = "block " <> show numberOfPeople <> " " <> show blockSize <> " " <> show (V.minimum positions) <> " " <> show (V.maximum positions)
+blockInfo (NucleotideAndPositionBlock numberOfHaplotypes blockSize _ positions) = "block " <> show numberOfHaplotypes <> " " <> show blockSize <> " " <> show (STO.minimum positions) <> " " <> show (STO.maximum positions)
 
-vectorToMatches :: Vector CInt -> [Match]
-vectorToMatches v = reverse $ mapMaybe toMatch (list4uple $ V.toList v)
+vectorToMatches :: STO.Vector CInt -> V.Vector Match
+vectorToMatches v = V.fromList $ reverse $ mapMaybe toMatch (list4uple $ STO.toList v)
     where toMatch (p:s:pos:sam:matchedSequence) = Just $ Match (fromIntegral p) (fromIntegral s) (fromIntegral pos) (fromIntegral sam) (trimMatchedSequence $ map (Nucleotide . fromIntegral) matchedSequence)
           toMatch [] = Nothing
           toMatch x = error ("Wrong size in Match vector: " ++ show (length x))
@@ -35,22 +35,22 @@ list4uple [] = []
 list4uple xs = let (x,rest) = splitAt 34 xs in x:list4uple rest
 
 
-patternToVector :: Pattern -> Vector CInt
-patternToVector p = V.fromList [fromIntegral $ length p, sum (map (floor . (*1000) . m) p)] <> mconcat (map step p)
+patternToVector :: Pattern -> STO.Vector CInt
+patternToVector p = STO.fromList [fromIntegral $ length p, sum (map (floor . (*1000) . m) p)] <> mconcat (map step p)
     where
-    step x = V.map (floor . (*1000)) (V.fromList [0, wa x, wc x, wg x, wt x, m x]) -- 0 For "N"
+    step x = STO.map (floor . (*1000)) (STO.fromList [0, wa x, wc x, wg x, wt x, m x]) -- 0 For "N"
     m x = maximum [wa x, wc x, wg x, wt x]
 
-pad :: V.Storable a => a -> Int -> Vector a -> Vector a
+pad :: STO.Storable a => a -> Int -> STO.Vector a -> STO.Vector a
 pad e len v = v <> padding
-    where padding = V.fromList $ replicate (len - V.length v) e
+    where padding = STO.fromList $ replicate (len - STO.length v) e
 
 padBS :: Nucleotide -> Int -> B.ByteString -> B.ByteString
 padBS (Nucleotide e) len v = B.append v (B.replicate (len - B.length v) e)
 
 -- Pad with nucleotide N if sizes are different
 mkNucleotideAndPositionBlock :: [BaseSequencePosition] -> NucleotideAndPositionBlock
-mkNucleotideAndPositionBlock [] = NucleotideAndPositionBlock 0 0 B.empty V.empty
+mkNucleotideAndPositionBlock [] = NucleotideAndPositionBlock 0 0 B.empty STO.empty
 mkNucleotideAndPositionBlock xs = NucleotideAndPositionBlock numberOfPeople max_length (B.concat $ map (padBS n max_length . seqOf) xs) (mconcat $ map (pad 0 max_length . posOf) xs)
     where numberOfPeople = length xs
           max_length = maximum (map (B.length . seqOf) xs)
@@ -59,7 +59,7 @@ mkNucleotideAndPositionBlock xs = NucleotideAndPositionBlock numberOfPeople max_
 
 
 mkPatterns :: [Pattern] -> Patterns
-mkPatterns patterns = Patterns $ mconcat (map patternToVector patterns) <> V.fromList [0]
+mkPatterns patterns = Patterns $ mconcat (map patternToVector patterns) <> STO.fromList [0]
 
 
 C.context (C.baseCtx <> C.vecCtx <> C.fptrCtx <> C.bsCtx)
@@ -70,7 +70,7 @@ C.include "<string.h>"
 
 foreign import ccall "&free" freePtr :: FunPtr (Ptr CInt-> IO ())
 
-findPatterns :: CInt -> CInt -> CInt -> B.ByteString -> Vector CInt -> Vector CInt -> Ptr CInt -> IO (Ptr CInt)
+findPatterns :: CInt -> CInt -> CInt -> B.ByteString -> STO.Vector CInt -> STO.Vector CInt -> Ptr CInt -> IO (Ptr CInt)
 findPatterns min_score sample_size block_size vec pos pat res_size = [C.block| int* {
     typedef struct Match {
         int score;
@@ -202,12 +202,12 @@ findPatterns min_score sample_size block_size vec pos pat res_size = [C.block| i
     } |]
 
 
-findPatternsInBlock :: Int -> NucleotideAndPositionBlock -> Patterns -> IO [Match]
+findPatternsInBlock :: Int -> NucleotideAndPositionBlock -> Patterns -> IO (V.Vector Match)
 findPatternsInBlock minScore (NucleotideAndPositionBlock numberOfPeople block_size inputData positionData) (Patterns patternData) = do
     result <- alloca $ \n_ptr -> do
         x <- findPatterns (fromIntegral minScore) (fromIntegral numberOfPeople) (fromIntegral block_size) inputData positionData patternData (n_ptr :: Ptr CInt)
         result_size <- peek n_ptr
         fptr <- newForeignPtr freePtr x
-        print ("result_size", result_size)
-        return $ V.unsafeFromForeignPtr0 fptr (fromIntegral (34 * result_size))
-    return $ vectorToMatches (result :: Vector CInt)
+        --print ("result_size", result_size)
+        return $ STO.unsafeFromForeignPtr0 fptr (fromIntegral (34 * result_size))
+    return $ vectorToMatches (result :: STO.Vector CInt)

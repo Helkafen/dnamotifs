@@ -3,9 +3,8 @@
 
 import Test.Framework
 
---import           Foreign.C.Types                 (CChar)
-import           Data.Vector.Storable            (Vector)
-import qualified Data.Vector.Storable            as V
+import qualified Data.Vector.Storable            as STO
+import qualified Data.Vector                     as V
 import qualified Data.Vector.Generic             as G
 import           Data.Monoid                     ((<>))
 import qualified Data.Text                       as T
@@ -46,35 +45,35 @@ test_patterns_basic = do
     assertEqual expected matches
   where inputData =  [BaseSequencePosition inputDataSample0 inputDataPositions]
 
-        inputDataPositions :: Vector CInt
-        inputDataPositions = V.fromList $ map fromIntegral $ take (B.length inputDataSample0) [0..]
+        inputDataPositions :: STO.Vector CInt
+        inputDataPositions = STO.fromList $ map fromIntegral $ take (B.length inputDataSample0) [0..]
 
         patterns = [pattern_CG]
 
-        expected = [Match {mPatternId = 0,  mScore = 1000, mPosition = 4, mSampleId = 0, mMatched = [c,g]}]
+        expected = V.fromList [Match {mPatternId = 0,  mScore = 1000, mPosition = 4, mSampleId = 0, mMatched = [c,g]}]
 
 test_patterns_basic2 :: IO ()
 test_patterns_basic2 = do
     matches <- findPatternsInBlock 500 (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns)
     assertEqual expected matches
   where inputData =  [BaseSequencePosition inputDataSample0 inputDataPositions]
-        inputDataPositions = V.fromList $ take (B.length inputDataSample0) (map fromIntegral [0..])
+        inputDataPositions = STO.fromList $ take (B.length inputDataSample0) (map fromIntegral [0..])
 
         patterns = [pattern_CG, pattern_cCGA]
 
-        expected = [Match {mPatternId = 1, mScore = 961,  mPosition = 3, mSampleId = 0, mMatched = [a, c, g, a]},
-                    Match {mPatternId = 0, mScore = 1000, mPosition = 4, mSampleId = 0, mMatched = [c,g]}]
+        expected = V.fromList [Match {mPatternId = 1, mScore = 961,  mPosition = 3, mSampleId = 0, mMatched = [a, c, g, a]},
+                                    Match {mPatternId = 0, mScore = 1000, mPosition = 4, mSampleId = 0, mMatched = [c,g]}]
 
 
 test_patterns_1 :: IO ()
 test_patterns_1 = do
     matches <- findPatternsInBlock 500 (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns)
-    assertEqual expected matches
+    assertEqual (V.fromList  expected) matches
   where numberOfPeople = 1000 :: Int
 
         inputData =  [BaseSequencePosition inputDataSample0 inputDataPositions, BaseSequencePosition inputDataSample1 inputDataPositions] ++ replicate (numberOfPeople - 2) (BaseSequencePosition inputDataSample2 inputDataPositions)
 
-        inputDataPositions = V.fromList $ take (B.length inputDataSample0) (map fromIntegral [0..])
+        inputDataPositions = STO.fromList $ take (B.length inputDataSample0) (map fromIntegral [0..])
 
         patterns = [pattern_CG, pattern_cCGA, pattern_CGA] ++ replicate 50 pattern_cccccccccc ++ [pattern_CG]
 
@@ -91,12 +90,12 @@ test_patterns_1 = do
 test_patterns_2 :: IO ()
 test_patterns_2 = do
     matches <- findPatternsInBlock 500 (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns)
-    assertEqual expected matches
+    assertEqual (V.fromList  expected) matches
   where numberOfPeople = 1000 :: Int
 
-        inputData =  [BaseSequencePosition inputDataSample0 inputDataPositions, BaseSequencePosition inputDataSample1 (V.map (+7) inputDataPositions)] ++ replicate (numberOfPeople - 2) (BaseSequencePosition inputDataSample2 inputDataPositions)
+        inputData =  [BaseSequencePosition inputDataSample0 inputDataPositions, BaseSequencePosition inputDataSample1 (STO.map (+7) inputDataPositions)] ++ replicate (numberOfPeople - 2) (BaseSequencePosition inputDataSample2 inputDataPositions)
 
-        inputDataPositions = V.fromList $ take (B.length inputDataSample0) (map fromIntegral [10..])
+        inputDataPositions = STO.fromList $ take (B.length inputDataSample0) (map fromIntegral [10..])
 
         patterns = [pattern_CG, pattern_cCGA, pattern_CGA] ++ replicate 50 pattern_cccccccccc ++ [pattern_CG]
 
@@ -113,11 +112,11 @@ test_patterns_2 = do
 test_patterns_padding :: IO ()
 test_patterns_padding = do
     matches <- findPatternsInBlock 500 (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns)
-    assertEqual expected matches
+    assertEqual (V.fromList  expected) matches
   where numberOfPeople = 1000 :: Int
 
-        inputData =  [BaseSequencePosition (B.take 5 inputDataSample0) (V.take 5 inputDataPositions), BaseSequencePosition inputDataSample1 inputDataPositions] ++ replicate (numberOfPeople - 2) (BaseSequencePosition (B.take 10 inputDataSample2) (V.take 10 inputDataPositions))
-        inputDataPositions = V.fromList $ take (B.length inputDataSample0) (map fromIntegral [10..])
+        inputData =  [BaseSequencePosition (B.take 5 inputDataSample0) (STO.take 5 inputDataPositions), BaseSequencePosition inputDataSample1 inputDataPositions] ++ replicate (numberOfPeople - 2) (BaseSequencePosition (B.take 10 inputDataSample2) (STO.take 10 inputDataPositions))
+        inputDataPositions = STO.fromList $ take (B.length inputDataSample0) (map fromIntegral [10..])
 
         patterns = [pattern_CG, pattern_cCGA, pattern_CGA] ++ replicate 50 pattern_cccccccccc ++ [pattern_CG]
 
@@ -132,78 +131,77 @@ test_patterns_padding = do
 refGenome :: Int -> Int -> BaseSequencePosition
 refGenome = takeRef (B.pack [65,67,71,84]) -- ACGT
 
--- applyVariants :: V.Vector Nucleotide -> Position -> Position -> [Variant] -> [(Nucleotide, Position)]
--- applyVariants referenceGenome (Position start) (Position end) variants = 
+
 test_apply_variant_1 :: IO ()
 test_apply_variant_1 = do
   let patched = applyVariants refGenome (Position 1) (Position 2) []
-  assertEqual (BaseSequencePosition (mkSeq [c,g]) (V.fromList [1,2])) patched
+  assertEqual (BaseSequencePosition (mkSeq [c,g]) (STO.fromList [1,2])) patched
 
 test_apply_variant_2 :: IO ()
 test_apply_variant_2 = do
   let patched = applyVariants refGenome (Position 0) (Position 2) []
-  assertEqual (BaseSequencePosition (mkSeq [a, c, g]) (V.fromList [0,1,2])) patched
+  assertEqual (BaseSequencePosition (mkSeq [a, c, g]) (STO.fromList [0,1,2])) patched
 
 test_apply_variant_3 :: IO ()
 test_apply_variant_3 = do
   let patched = applyVariants refGenome (Position 0) (Position 5) []
-  assertEqual (BaseSequencePosition (mkSeq [a,c,g,t]) (V.fromList [0,1,2,3])) patched
+  assertEqual (BaseSequencePosition (mkSeq [a,c,g,t]) (STO.fromList [0,1,2,3])) patched
 
 test_apply_variant_4 :: IO ()
 test_apply_variant_4 = do
   let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 100 (mkSeq [a]) (mkSeq [c])]
-  assertEqual (BaseSequencePosition (mkSeq [c,g]) (V.fromList [1,2])) patched
+  assertEqual (BaseSequencePosition (mkSeq [c,g]) (STO.fromList [1,2])) patched
 ----prop_reverse :: [Int] -> Bool
 ----prop_reverse xs = xs == (myReverse (myReverse xs))
 test_apply_variant_5 :: IO ()
 test_apply_variant_5 = do
   let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 1 (mkSeq [c]) (mkSeq [n])]
-  assertEqual (BaseSequencePosition (mkSeq [n,g]) (V.fromList [1,2])) patched
+  assertEqual (BaseSequencePosition (mkSeq [n,g]) (STO.fromList [1,2])) patched
 
 test_apply_variant_6 :: IO ()
 test_apply_variant_6 = do
   let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 2 (mkSeq [g]) (mkSeq [a])]
-  assertEqual (BaseSequencePosition (mkSeq [c,a]) (V.fromList [1,2])) patched
+  assertEqual (BaseSequencePosition (mkSeq [c,a]) (STO.fromList [1,2])) patched
 
 test_apply_variant_7 :: IO ()
 test_apply_variant_7 = do
   let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 1 (mkSeq [c]) (mkSeq [n]), Diff 2 (mkSeq [g]) (mkSeq [a])]
-  assertEqual (BaseSequencePosition (mkSeq [n,a]) (V.fromList [1,2])) patched
+  assertEqual (BaseSequencePosition (mkSeq [n,a]) (STO.fromList [1,2])) patched
 
 test_apply_variant_8 :: IO ()
 test_apply_variant_8 = do
   let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 0 (mkSeq [c]) (mkSeq [n]), Diff 4 (mkSeq [g]) (mkSeq [a])]
-  assertEqual (BaseSequencePosition (mkSeq [c,g]) (V.fromList [1,2])) patched
+  assertEqual (BaseSequencePosition (mkSeq [c,g]) (STO.fromList [1,2])) patched
 
 test_apply_variant_9 :: IO ()
 test_apply_variant_9 = do
   let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 1 (mkSeq [c]) (mkSeq [n,n])]
-  assertEqual (BaseSequencePosition (mkSeq[n,n,g]) (V.fromList [1,1,2])) patched
+  assertEqual (BaseSequencePosition (mkSeq[n,n,g]) (STO.fromList [1,1,2])) patched
 
 test_apply_variant_10 :: IO ()
 test_apply_variant_10 = do
   let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 2 (mkSeq [c]) (mkSeq [n,n])]
-  assertEqual (BaseSequencePosition (mkSeq[c,n,n]) (V.fromList[1,2,2])) patched
+  assertEqual (BaseSequencePosition (mkSeq[c,n,n]) (STO.fromList[1,2,2])) patched
 
 test_apply_variant_11 :: IO ()
 test_apply_variant_11 = do
   let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 3 (mkSeq [c]) (mkSeq [n,n])]
-  assertEqual (BaseSequencePosition (mkSeq[c,g]) (V.fromList [1,2])) patched
+  assertEqual (BaseSequencePosition (mkSeq[c,g]) (STO.fromList [1,2])) patched
 
 test_apply_variant_12 :: IO ()
 test_apply_variant_12 = do
   let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 1 (mkSeq [c, g]) (mkSeq [n])]
-  assertEqual (BaseSequencePosition (mkSeq[n]) (V.fromList [1])) patched
+  assertEqual (BaseSequencePosition (mkSeq[n]) (STO.fromList [1])) patched
 
 test_apply_variant_13 :: IO ()
 test_apply_variant_13 = do
   let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 2 (mkSeq [g, t]) (mkSeq [n])]
-  assertEqual (BaseSequencePosition (mkSeq[c,n]) (V.fromList [1,2])) patched
+  assertEqual (BaseSequencePosition (mkSeq[c,n]) (STO.fromList [1,2])) patched
 
 test_apply_variant_14 :: IO ()
 test_apply_variant_14 = do
   let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 0 (mkSeq [a, c, g]) (mkSeq [n, n])]
-  assertEqual (BaseSequencePosition (mkSeq[c,g]) (V.fromList [1,2])) patched -- For simplicity, do not apply a Diff that starts before the window we're observing
+  assertEqual (BaseSequencePosition (mkSeq[c,g]) (STO.fromList [1,2])) patched -- For simplicity, do not apply a Diff that starts before the window we're observing
 
 test_parse_1 :: IO ()
 test_parse_1 = do

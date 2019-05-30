@@ -1,12 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
-import           Data.Vector.Storable            (Vector)
-import qualified Data.Vector.Storable            as V
+import qualified Data.Vector.Storable            as STO
+import qualified Data.Vector                     as Vector
 import qualified Data.ByteString                 as B
 import qualified Data.Text                       as T
 import           Data.Monoid                     ((<>))
-import           Data.Time.Clock.POSIX (getPOSIXTime)
 import           Foreign.C.Types                 (CInt)
 import           System.Environment              (getArgs)
 import Data.List (elem)
@@ -37,14 +36,14 @@ patterns = mkPatterns $ [pattern_CG, pattern_cCGA, pattern_CGA] ++ replicate 50 
 bench :: IO ()
 bench = do
     matches <- findPatternsInBlock 500 (mkNucleotideAndPositionBlock inputData) patterns
-    print (expected == matches)
+    print ((Vector.fromList  expected) == matches)
   where numberOfPeople = 10000 :: Int
 
         inputData :: [BaseSequencePosition]
         inputData =  [BaseSequencePosition inputDataSample0 inputDataPositions, BaseSequencePosition inputDataSample1 inputDataPositions] ++ (replicate (numberOfPeople - 2) (BaseSequencePosition inputDataSample2 inputDataPositions))
 
-        inputDataPositions :: Vector CInt
-        inputDataPositions = V.fromList $ take (B.length inputDataSample0) [0..]
+        inputDataPositions :: STO.Vector CInt
+        inputDataPositions = STO.fromList $ take (B.length inputDataSample0) [0..]
 
         expected = [Match {mPatternId = 53, mScore = 1000, mPosition = 0, mSampleId = 1, mMatched = [c, g]}
                     ,Match {mPatternId = 2,  mScore = 1000, mPosition = 0, mSampleId = 1, mMatched = [c, g]}
@@ -62,8 +61,6 @@ main = do
     
     case args of
       [] -> do
-        print ("Hello world" :: String)
-        t1 <- getPOSIXTime
         --bench
         -- From http://schemer.buenrostrolab.com :
         --JUNB SMARCC1 FOSL2 FOSL1 JUND GATA1 JUN                  GATA2 FOS    BATF GATA3 BACH1 ATF3 BACH2 FOSB BCL11A BCL11B JDP2 GATA5 NFE2  SPI1D GATA4 CEBPB CEBPA SPIB IRF8      SPI1 CEBPD
@@ -72,8 +69,6 @@ main = do
         --LMO2 GATA6 CEBPG MESP1 MESP2 ID3 ID4 TCF12 TCF4 STAT1 CEBPE SPIC CTCF IRF1 STAT2 DBP MAFK ATF4 ASCL1 TCF3 MYOD1 ATOH8 MECOM ASCL2 IRF3 ZEB1 IRF9 NHLH1 LYL1
         --x    Gata6                           Tcf12 Tcf4 STAT1            CTCF IRF1           MafK Atf4 Ascl1 Tcf3 
         _ <- findPatterns (Chromosome "1") patterns 900 "chr1.bed" "hg38.fa" "chr1.vcf.gz" "resultFile.tab"
-        t2 <- getPOSIXTime
-        print (round $ (t2 - t1) * 1000 :: Integer) -- milliseconds
         pure ()
       [chrom, referenceGenomeFastaFile, motifFile, peakBedFile, vcfFile, outputFile] -> do
         wantedPatterns <- (mkPatterns . map snd . filter ((`elem` patternNames) . fst)) <$> loadMotifs motifFile

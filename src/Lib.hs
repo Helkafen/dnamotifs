@@ -161,6 +161,7 @@ processPeak chr minScore patterns takeReferenceGenome samples (peakStart, peakEn
         let diffsOfMatch = uniqueDiffs !! mSampleId match :: V.Vector Diff
         let haploIdsOfMatch = Data.Map.findWithDefault (haplotypesWithNoVariant) diffsOfMatch m :: [(Int, Haplotype)]
         let strings = map (formatMatch chr peakStart peakEnd samples match) haploIdsOfMatch :: [T.Text]
+        --forM_ (take 2 strings) $ TIO.putStrLn
         if (length strings == -1)
             then print strings
             else pure()

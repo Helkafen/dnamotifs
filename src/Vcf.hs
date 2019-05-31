@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# OPTIONS_GHC -fplugin Foreign.Storable.Generic.Plugin #-}
+-- {-# OPTIONS_GHC -fplugin Foreign.Storable.Generic.Plugin #-} -- Is supposed to make Storable instances faster. Doesn't seem to make a difference
 
 module Vcf (readVcfWithGenotypes, parseVariant, filterOrderedIntervals, parseVcfContent) where
 

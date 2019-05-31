@@ -34,7 +34,7 @@ ghc-options:
   - -Wall
   - -Wincomplete-uni-patterns
   - -Wincomplete-record-updates
-  - -fplugin Foreign.Storable.Generic.Plugin
+ # - -fplugin Foreign.Storable.Generic.Plugin   # Is supposed to make Storable instances faster. Doesn't seem to make a difference
 
 _exe-ghc-options: &exe-ghc-options
   - -rtsopts

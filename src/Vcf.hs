@@ -1,4 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# OPTIONS_GHC -fplugin Foreign.Storable.Generic.Plugin #-}
 
 module Vcf (readVcfWithGenotypes, parseVariant, filterOrderedIntervals, parseVcfContent) where
@@ -26,9 +28,45 @@ import           Data.Functor (($>))
 import           Data.Either (rights, fromRight)
 import qualified Data.DList as DList
 import           Data.Word (Word8)
-import Debug.Trace (traceShow)
+import qualified Language.C.Inline               as C
+import           System.IO.Unsafe (unsafePerformIO)
+import           Foreign.C.Types                 (CInt)
 
 import Types
+
+
+C.context (C.baseCtx <> C.vecCtx <> C.fptrCtx <> C.bsCtx)
+
+C.include "<stdio.h>"
+
+parseV ::  B.ByteString -> CInt -> STO.Vector CInt ->  STO.Vector CInt -> IO CInt
+parseV line line_length l_ptr r_ptr = [C.block| int {
+          int count_l = 0;
+          int count_r = 0;
+          int* l = $vec-ptr:(int *l_ptr);
+          int* r = $vec-ptr:(int *r_ptr);
+          char* in = &($bs-ptr:line[0]);
+          int length = $(int line_length);
+          int res = 0;
+          for(int i,j = 0; i<length - 2; i=i+4, j++) {
+            if(in[i] == '1')
+              l[count_l++] = j+1;
+            if(in[i+2] == '1')
+              r[count_r++] = j+1;
+          }
+          l[count_l] = 0;
+          r[count_r] = 0;
+          return 0;
+          } |]
+
+fillVector :: Int -> B.ByteString -> (STO.Vector CInt, STO.Vector CInt)
+fillVector size s = let l = STO.replicate (size+1) 0 :: STO.Vector CInt
+                        r = STO.replicate (size+1) 0 :: STO.Vector CInt
+                        res = unsafePerformIO (parseV s (fromIntegral $ B.length s) l r)
+                    in if res == res
+                         then (STO.map (\x -> x - 1) $ STO.takeWhile (>0) l, STO.map (\x -> x - 1) $ STO.takeWhile (>0) r)
+                         else error ("The impossible happened!") -- To be honest, this call to parseV is weird
+
 
 readGzippedLines :: FilePath -> IO [B.ByteString]
 readGzippedLines path = map BL.toStrict . BLC.lines . GZip.decompress <$> BL.readFile path
@@ -50,8 +88,7 @@ readVcfWithGenotypes path regions = do
 sampleIdsInHeader :: B.ByteString -> V.Vector SampleId
 sampleIdsInHeader header = V.fromList $ map (SampleId . decodeUtf8With ignore) $ drop 9 (B.split (fromIntegral $ ord '\t') header)
 
--- Hand tested
--- The first Variant is parsed by the slow parser in order to check more things. We assume that the other lines will have the same quirks
+
 parseVcfContent :: [(Position0, Position0)] -> [B.ByteString] -> Either Error [Variant]
 parseVcfContent regions vcfLines = case vcfLines of
     [] -> Left $ ParsingError "Empty vcf file"
@@ -61,8 +98,6 @@ parseVcfContent regions vcfLines = case vcfLines of
               pos = Position . (\p -> p - 1) . fromRight (error "Bad position in vcf") . parseInt . B.takeWhile (/= tab) . B.drop 1  . B.dropWhile (/= tab)
               parseInt = parseOnly decimal
 
---digit = satisfy isDigit
---    where isDigit w = w >= 48 && w <= 57
 
 chromosomeParser :: Parser Chromosome
 chromosomeParser = choice [autosomeParser, xParser, yParser]
@@ -73,33 +108,6 @@ chromosomeParser = choice [autosomeParser, xParser, yParser]
             pure (Chromosome $ T.pack $ show (d :: Integer))
           xParser = string "X" $> Chromosome "X"
           yParser = string "Y" $> Chromosome "Y"
-
-geno00_t1, geno00_t2 :: B.ByteString
-geno00_t1 = B.pack (map (fromIntegral . ord) "0/0")
-geno00_t2 = B.pack (map (fromIntegral . ord) "0|0")
-
-geno01_t1, geno01_t2 :: B.ByteString
-geno01_t1 = B.pack (map (fromIntegral . ord) "0/1")
-geno01_t2 = B.pack (map (fromIntegral . ord) "0|1")
-
-geno10_t1, geno10_t2 :: B.ByteString
-geno10_t1 = B.pack (map (fromIntegral . ord) "1/0")
-geno10_t2 = B.pack (map (fromIntegral . ord) "1|0")
-
-geno11_t1, geno11_t2 :: B.ByteString
-geno11_t1 = B.pack (map (fromIntegral . ord) "1/1")
-geno11_t2 = B.pack (map (fromIntegral . ord) "1|1")
-
-toGeno :: B.ByteString -> Genotype
-toGeno x | x == geno00_t1 = geno00
-         | x == geno00_t2 = geno00
-         | x == geno01_t1 = geno01
-         | x == geno01_t2 = geno01
-         | x == geno10_t1 = geno10
-         | x == geno10_t2 = geno10
-         | x == geno11_t1 = geno11
-         | x == geno11_t2 = geno11
-         | otherwise = error ("Unsupported genotype" <> show x)
 
 
 variantIdParser :: Parser (Maybe Text)
@@ -120,24 +128,13 @@ variantParser sampleIdentifiers = do
     ref <- (B.pack . map (unNuc . toNuc . fromIntegral . ord)) <$> many1 letter_ascii <* word8 tab
     alt <- (B.pack . map (unNuc . toNuc . fromIntegral . ord))  <$> many1 letter_ascii <* word8 tab
     skipField >> skipField >> skipField >> skipField
-    geno <- fillVector <$> takeWhile1 (/=newline)
-    --guard $ STO.length geno == V.length sampleIdentifiers
+    (genoL, genoR) <- fillVector (V.length sampleIdentifiers) <$> takeWhile1 (/=newline)
     _ <- option newline (word8 newline)
-    return $ Variant chr pos name ref alt geno sampleIdentifiers
+    return $ Variant chr pos name ref alt genoL genoR sampleIdentifiers
   where
     skipField = skipWhile (/= tab) >> skip (== tab)
-
-
-fillVector :: B.ByteString -> STO.Vector IntGenotype
-fillVector str = STO.fromList (go 0 str)
-  where go :: Int -> B.ByteString -> [IntGenotype]
-        go i b = let x = B.take 3 b
-                 in if B.length x /= 3
-                      then []
-                      else let g = toGeno x in if g == geno00 then go (i+1) (B.drop 4 b) else IntGenotype i g:go (i+1) (B.drop 4 b) -- Doesn't check that the separators are tabs
 
 
 parseVariant :: V.Vector SampleId -> B.ByteString -> Either Error (Variant)
 parseVariant sampleIdentifiers s = 
     mapLeft (ParsingError . (\e -> (decodeUtf8With ignore s) <> " " <> T.pack e)) (parseOnly (variantParser sampleIdentifiers) s) 
-

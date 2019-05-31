@@ -7,7 +7,6 @@ module Types (
   Match(..),
   Nucleotide(..), n, a, c, g, t, toNuc,
   Genotype, geno00, geno01, geno10, geno11, -- Do not export the data constructor to forbid the creation of illegal values
-  IntGenotype(..),
   BaseSequence,
   BaseSequencePosition(..),
   Chromosome(..),
@@ -110,12 +109,6 @@ newtype Chromosome = Chromosome { unChr :: Text }
 newtype Position0 = Position Int
   deriving (Eq, Ord, Show, Num, Enum, Real, Integral, STO.Storable)
 
-
-data IntGenotype = IntGenotype {-# UNPACK #-} !Int {-# UNPACK #-} !Genotype
-  deriving (Eq, Show, Generic)
-
-instance GStorable IntGenotype
-
   
 -- The ID of a person
 newtype SampleId = SampleId Text
@@ -132,7 +125,8 @@ data Variant = Variant {
     variantId :: !(Maybe Text),
     reference :: !BaseSequence,
     alternative :: !BaseSequence,
-    genotypes :: !(STO.Vector IntGenotype), -- All the values different from 0|0. Int is the sampleId
+    genotypesL :: !(STO.Vector CInt),
+    genotypesR :: !(STO.Vector CInt),
     sampleIds :: !(V.Vector SampleId)
 } deriving (Eq, Show)
 

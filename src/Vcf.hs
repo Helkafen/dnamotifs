@@ -120,22 +120,21 @@ variantParser sampleIdentifiers = do
     ref <- (B.pack . map (unNuc . toNuc . fromIntegral . ord)) <$> many1 letter_ascii <* word8 tab
     alt <- (B.pack . map (unNuc . toNuc . fromIntegral . ord))  <$> many1 letter_ascii <* word8 tab
     skipField >> skipField >> skipField >> skipField
-    geno <- fillVector (V.length sampleIdentifiers) <$> takeWhile1 (/=newline)
-    guard $ STO.length geno == V.length sampleIdentifiers
+    geno <- fillVector <$> takeWhile1 (/=newline)
+    --guard $ STO.length geno == V.length sampleIdentifiers
     _ <- option newline (word8 newline)
     return $ Variant chr pos name ref alt geno sampleIdentifiers
   where
     skipField = skipWhile (/= tab) >> skip (== tab)
 
 
-fillVector :: Int -> B.ByteString -> STO.Vector Genotype
-fillVector size str = let updates = go 0 str
-                      in STO.unsafeCast $ (STO.//) (STO.replicate size geno00) updates
-  where go :: Int -> B.ByteString -> [(Int, Genotype)]
+fillVector :: B.ByteString -> STO.Vector IntGenotype
+fillVector str = STO.fromList (go 0 str)
+  where go :: Int -> B.ByteString -> [IntGenotype]
         go i b = let x = B.take 3 b
                  in if B.length x /= 3
                       then []
-                      else (i,toGeno x):go (i+1) (B.drop 4 b)
+                      else let g = toGeno x in if g == geno00 then go (i+1) (B.drop 4 b) else IntGenotype i g:go (i+1) (B.drop 4 b) -- Doesn't check that the separators are tabs
 
 
 parseVariant :: V.Vector SampleId -> B.ByteString -> Either Error (Variant)

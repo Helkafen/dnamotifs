@@ -208,7 +208,7 @@ test_parse_1 :: IO ()
 test_parse_1 = do
   let line = "chr1\t69081\t1:69081:G:C\tC\tG\t.\t.\t.\tGT\t1/1\t1/1"
   let sampleIdentifiers = G.fromList [SampleId "sample1", SampleId "sample2"]
-  assertEqual (Right $ Variant (Chromosome "1") (Position 69080) (Just "1:69081:G:C") (mkSeq [c]) (mkSeq [g]) (G.fromList [geno11, geno11]) sampleIdentifiers) (parseVariant sampleIdentifiers line)
+  assertEqual (Right $ Variant (Chromosome "1") (Position 69080) (Just "1:69081:G:C") (mkSeq [c]) (mkSeq [g]) (G.fromList [(0, geno11), (1, geno11)]) sampleIdentifiers) (parseVariant sampleIdentifiers line)
 
 test_filterOrderedIntervals_1 :: IO ()
 test_filterOrderedIntervals_1 = do
@@ -227,7 +227,7 @@ test_parseVcfContent_1 = do
              "chr1\t22\tname21\tC\tA\t\t\t\t\t0/0\t0/1"
             ] :: [B.ByteString]
   let parsed = parseVcfContent [(Position 5, Position 15), (Position 18, Position 25)] vcf
-  let var p = Variant (Chromosome "1") (Position p) (Just $ "name" <> T.pack (show p)) (mkSeq [c]) (mkSeq [a]) (G.fromList [geno00, geno01]) (G.fromList [SampleId "sample1", SampleId "sample2"])
+  let var p = Variant (Chromosome "1") (Position p) (Just $ "name" <> T.pack (show p)) (mkSeq [c]) (mkSeq [a]) (G.fromList [(0, geno00), (1, geno01)]) (G.fromList [SampleId "sample1", SampleId "sample2"])
   let expected = Right [var 5, var 12, var 15, var 21]
   assertEqual expected parsed
 
@@ -257,7 +257,7 @@ test_motif_parser_1 = do
 test_variantsToDiffs_1 :: IO ()
 test_variantsToDiffs_1 = do
   let sampleIdentifiers = G.fromList [SampleId "sample1", SampleId "sample2"]
-  let variant = Variant (Chromosome "1") (Position 69080) (Just "1:69081:G:C") (mkSeq [c]) (mkSeq [g]) (G.fromList [geno10, geno01]) sampleIdentifiers
+  let variant = Variant (Chromosome "1") (Position 69080) (Just "1:69081:G:C") (mkSeq [c]) (mkSeq [g]) (G.fromList [(0, geno10), (1, geno01)]) sampleIdentifiers
   let diffs = variantsToDiffs [variant]
   let expected = Data.Map.fromList [((0,HaploLeft), V.fromList [Diff (Position 69080) (mkSeq [c]) (mkSeq [g])])
                                    ,((1,HaploRight),V.fromList [Diff (Position 69080) (mkSeq [c]) (mkSeq [g])])] :: Data.Map.Map (Int, Haplotype) (V.Vector Diff)
@@ -266,9 +266,9 @@ test_variantsToDiffs_1 = do
 test_variantsToDiffs_2 :: IO ()
 test_variantsToDiffs_2 = do
   let sampleIdentifiers = G.fromList [SampleId "sample1", SampleId "sample2"]
-  let variant1 = Variant (Chromosome "1") (Position 69080) (Just "1:69081:G:C") (mkSeq [c]) (mkSeq [g]) (G.fromList [geno10, geno01]) sampleIdentifiers
-  let variant2 = Variant (Chromosome "1") (Position 69079) (Just "1:69079:A:T") (mkSeq [a]) (mkSeq [t]) (G.fromList [geno10, geno00]) sampleIdentifiers
-  let variant3 = Variant (Chromosome "1") (Position 69078) (Just "1:69078:T:G") (mkSeq [t]) (mkSeq [g]) (G.fromList [geno01, geno00]) sampleIdentifiers
+  let variant1 = Variant (Chromosome "1") (Position 69080) (Just "1:69081:G:C") (mkSeq [c]) (mkSeq [g]) (G.fromList [(0, geno10), (1, geno01)]) sampleIdentifiers
+  let variant2 = Variant (Chromosome "1") (Position 69079) (Just "1:69079:A:T") (mkSeq [a]) (mkSeq [t]) (G.fromList [(0, geno10), (1, geno00)]) sampleIdentifiers
+  let variant3 = Variant (Chromosome "1") (Position 69078) (Just "1:69078:T:G") (mkSeq [t]) (mkSeq [g]) (G.fromList [(0, geno01), (1, geno00)]) sampleIdentifiers
   let diffs = variantsToDiffs [variant1, variant2, variant3]
   let diff1 = Diff (Position 69080) (mkSeq [c]) (mkSeq [g])
   let diff2 = Diff (Position 69079) (mkSeq [a]) (mkSeq [t])

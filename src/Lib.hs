@@ -70,8 +70,8 @@ variantsToDiffs variants = fmap (V.modify sort) $ Data.Map.fromListWith (<>) (V.
 
 variantToDiffs :: Variant -> V.Vector (Int, Haplotype, Diff)
 variantToDiffs v = V.map (\i -> (i, HaploLeft, d)) (STO.convert left) <> V.map (\i -> (i, HaploRight, d)) (STO.convert right)
-    where left = STO.findIndices (\x -> x == geno10 || x == geno11) (genotypes v)
-          right = STO.findIndices (\x -> x == geno01 || x == geno11) (genotypes v)
+    where left  = STO.map (\(IntGenotype i _) -> i) $ STO.filter (\(IntGenotype _ x) -> x == geno10 || x == geno11) (genotypes v)
+          right = STO.map (\(IntGenotype i _) -> i) $ STO.filter (\(IntGenotype _ x) -> x == geno10 || x == geno11) (genotypes v)
           d = Diff (position v) (reference v) (alternative v)
 
 

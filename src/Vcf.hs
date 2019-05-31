@@ -3,7 +3,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 -- {-# OPTIONS_GHC -fplugin Foreign.Storable.Generic.Plugin #-} -- Is supposed to make Storable instances faster. Doesn't seem to make a difference
 
-module Vcf (readVcfWithGenotypes, parseVariant, filterOrderedIntervals, parseVcfContent) where
+module Vcf (readVcfWithGenotypes, parseVariant, filterOrderedIntervals, parseVcfContent, fillVector) where
 
 import           Data.Text.Encoding (decodeUtf8With)
 import           Data.Text.Encoding.Error (ignore)
@@ -31,41 +31,64 @@ import           Data.Word (Word8)
 import qualified Language.C.Inline               as C
 import           System.IO.Unsafe (unsafePerformIO)
 import           Foreign.C.Types                 (CInt)
+import           Foreign                         (Ptr, FunPtr)
+import           Foreign.ForeignPtr              (newForeignPtr)
 
 import Types
-
 
 C.context (C.baseCtx <> C.vecCtx <> C.fptrCtx <> C.bsCtx)
 
 C.include "<stdio.h>"
+C.include "<stdlib.h>"
 
-parseV ::  B.ByteString -> CInt -> STO.Vector CInt ->  STO.Vector CInt -> IO CInt
-parseV line line_length l_ptr r_ptr = [C.block| int {
-          int count_l = 0;
-          int count_r = 0;
-          int* l = $vec-ptr:(int *l_ptr);
-          int* r = $vec-ptr:(int *r_ptr);
+foreign import ccall "&free" freePtr :: FunPtr (Ptr CInt-> IO ())
+
+parseV ::  B.ByteString -> CInt -> IO (Ptr CInt)
+parseV line line_length = [C.block| int* {
           char* in = &($bs-ptr:line[0]);
           int length = $(int line_length);
-          int res = 0;
+
+          int* resultL = (int*)malloc(length * sizeof(int));
+          int* resultR = (int*)malloc(length * sizeof(int));
+          int count_l = 0;
+          int count_r = 0;
+
           for(int i,j = 0; i<length - 2; i=i+4, j++) {
             if(in[i] == '1')
-              l[count_l++] = j+1;
+              resultL[count_l++] = j+1;
             if(in[i+2] == '1')
-              r[count_r++] = j+1;
+              resultR[count_r++] = j+1;
           }
-          l[count_l] = 0;
-          r[count_r] = 0;
-          return 0;
+          int* result = (int*)malloc((length+1) * sizeof(int) * 2);
+
+          result[0] = count_l;
+          result[1] = count_r;
+          int i = 2;
+          for(int j = 0;j<count_l;i++,j++) {
+            result[i] = resultL[j];
+          }
+
+          for(int j = 0;j<count_r;i++,j++) {
+            result[i] = resultR[j];
+          }
+
+          free(resultL);
+          free(resultR);
+
+          return result;
           } |]
 
-fillVector :: Int -> B.ByteString -> (STO.Vector CInt, STO.Vector CInt)
-fillVector size s = let l = STO.replicate (size+1) 0 :: STO.Vector CInt
-                        r = STO.replicate (size+1) 0 :: STO.Vector CInt
-                        res = unsafePerformIO (parseV s (fromIntegral $ B.length s) l r)
-                    in if res == res
-                         then (STO.map (\x -> x - 1) $ STO.takeWhile (>0) l, STO.map (\x -> x - 1) $ STO.takeWhile (>0) r)
-                         else error ("The impossible happened!") -- To be honest, this call to parseV is weird
+fillVector :: B.ByteString -> (STO.Vector CInt, STO.Vector CInt)
+fillVector s = unsafePerformIO go
+  where go = do x <- parseV s len
+                fptr <- newForeignPtr freePtr x
+                let vec = STO.map fromIntegral $ STO.unsafeFromForeignPtr0 fptr (fromIntegral $ 2 + 2 * (len + 1))
+                let lenL = STO.head vec
+                let lenR = STO.head (STO.drop 1 vec)
+                let left = STO.take lenL (STO.drop 2 vec)
+                let right = STO.take lenR (STO.drop (2+lenL) vec)
+                pure (STO.map (\x -> fromIntegral $ x - 1) left, STO.map (\x -> fromIntegral $ x - 1) right)
+        len = (fromIntegral $ B.length s)
 
 
 readGzippedLines :: FilePath -> IO [B.ByteString]
@@ -128,7 +151,7 @@ variantParser sampleIdentifiers = do
     ref <- (B.pack . map (unNuc . toNuc . fromIntegral . ord)) <$> many1 letter_ascii <* word8 tab
     alt <- (B.pack . map (unNuc . toNuc . fromIntegral . ord))  <$> many1 letter_ascii <* word8 tab
     skipField >> skipField >> skipField >> skipField
-    (genoL, genoR) <- fillVector (V.length sampleIdentifiers) <$> takeWhile1 (/=newline)
+    (genoL, genoR) <- fillVector <$> takeWhile1 (/=newline)
     _ <- option newline (word8 newline)
     return $ Variant chr pos name ref alt genoL genoR sampleIdentifiers
   where

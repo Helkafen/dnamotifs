@@ -17,7 +17,7 @@ import Types
 import PatternFind
 import Lib
 import Fasta (takeRef)
-import Vcf (parseVariant, filterOrderedIntervals, parseVcfContent)
+import Vcf (parseVariant, filterOrderedIntervals, parseVcfContent, fillVector)
 import Bed (parseBedContent)
 import MotifDefinition (parseMotifsContent)
 
@@ -215,6 +215,24 @@ test_filterOrderedIntervals_1 = do
   let inf = [10..]
   let filtered = filterOrderedIntervals Position [(Position 15, Position 18), (Position 20, Position 23)] inf
   assertEqual [15, 16, 17, 18, 20, 21, 22, 23] filtered
+
+test_fillVector1 :: IO ()
+test_fillVector1 = do
+  let (vecL, vecR) = fillVector (encodeUtf8 "0/0\t0/1")
+  let expected = (STO.fromList [], STO.fromList [1])
+  assertEqual expected (vecL, vecR)
+
+test_fillVector2 :: IO ()
+test_fillVector2 = do
+  let (vecL, vecR) = fillVector (encodeUtf8 "0/1\t0/0")
+  let expected = (STO.fromList [], STO.fromList [0])
+  assertEqual expected (vecL, vecR)
+
+test_fillVector3 :: IO ()
+test_fillVector3 = do
+  let (vecL, vecR) = fillVector (encodeUtf8 "1/0\t0/0")
+  let expected = (STO.fromList [0], STO.fromList [])
+  assertEqual expected (vecL, vecR)
 
 test_parseVcfContent_1 :: IO ()
 test_parseVcfContent_1 = do

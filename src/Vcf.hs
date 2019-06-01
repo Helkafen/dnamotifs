@@ -33,6 +33,7 @@ import           System.IO.Unsafe (unsafePerformIO)
 import           Foreign.C.Types                 (CInt)
 import           Foreign                         (Ptr, FunPtr)
 import           Foreign.ForeignPtr              (newForeignPtr)
+import           Control.Parallel.Strategies (parMap, rdeepseq)
 
 import Types
 
@@ -55,9 +56,9 @@ parseV line line_length = [C.block| int* {
 
           for(int i,j = 0; i<length - 2; i=i+4, j++) {
             if(in[i] == '1')
-              resultL[count_l++] = j+1;
+              resultL[count_l++] = j;
             if(in[i+2] == '1')
-              resultR[count_r++] = j+1;
+              resultR[count_r++] = j;
           }
           int* result = (int*)malloc((length+1) * sizeof(int) * 2);
 
@@ -78,7 +79,7 @@ parseV line line_length = [C.block| int* {
           return result;
           } |]
 
-fillVector :: B.ByteString -> (STO.Vector CInt, STO.Vector CInt)
+fillVector :: B.ByteString -> (STO.Vector Int, STO.Vector Int)
 fillVector s = unsafePerformIO go
   where go = do x <- parseV s len
                 fptr <- newForeignPtr freePtr x
@@ -87,8 +88,8 @@ fillVector s = unsafePerformIO go
                 let lenR = STO.head (STO.drop 1 vec)
                 let left = STO.take lenL (STO.drop 2 vec)
                 let right = STO.take lenR (STO.drop (2+lenL) vec)
-                pure (STO.map (\x -> fromIntegral $ x - 1) left, STO.map (\x -> fromIntegral $ x - 1) right)
-        len = (fromIntegral $ B.length s)
+                pure (STO.map fromIntegral left, STO.map fromIntegral right)
+        len = fromIntegral (B.length s)
 
 
 readGzippedLines :: FilePath -> IO [B.ByteString]
@@ -115,7 +116,7 @@ sampleIdsInHeader header = V.fromList $ map (SampleId . decodeUtf8With ignore) $
 parseVcfContent :: [(Position0, Position0)] -> [B.ByteString] -> Either Error [Variant]
 parseVcfContent regions vcfLines = case vcfLines of
     [] -> Left $ ParsingError "Empty vcf file"
-    (header:rest) -> pure $ rights $ map (parseVariant sampleIdentifiers) (filterOrderedIntervals pos regions rest) -- TODO: exception for a left
+    (header:rest) -> pure $ rights $ parMap rdeepseq (parseVariant sampleIdentifiers) (filterOrderedIntervals pos regions rest) -- TODO: exception for a left
         where sampleIdentifiers = sampleIdsInHeader header
               pos :: B.ByteString -> Position0
               pos = Position . (\p -> p - 1) . fromRight (error "Bad position in vcf") . parseInt . B.takeWhile (/= tab) . B.drop 1  . B.dropWhile (/= tab)
@@ -139,9 +140,9 @@ variantIdParser = choice [none, rs] <?> "variant_name"
           none = word8 dot $> Nothing
 
 dot, tab, newline :: Word8
-dot = (fromIntegral $ ord '.')
-tab = (fromIntegral $ ord '\t')
-newline = (fromIntegral $ ord '\n')
+dot = fromIntegral (ord '.')
+tab = fromIntegral (ord '\t')
+newline = fromIntegral (ord '\n')
 
 variantParser :: V.Vector SampleId -> Parser Variant
 variantParser sampleIdentifiers = do
@@ -158,6 +159,6 @@ variantParser sampleIdentifiers = do
     skipField = skipWhile (/= tab) >> skip (== tab)
 
 
-parseVariant :: V.Vector SampleId -> B.ByteString -> Either Error (Variant)
+parseVariant :: V.Vector SampleId -> B.ByteString -> Either Error Variant
 parseVariant sampleIdentifiers s = 
-    mapLeft (ParsingError . (\e -> (decodeUtf8With ignore s) <> " " <> T.pack e)) (parseOnly (variantParser sampleIdentifiers) s) 
+    mapLeft (ParsingError . (\e -> decodeUtf8With ignore s <> " " <> T.pack e)) (parseOnly (variantParser sampleIdentifiers) s) 

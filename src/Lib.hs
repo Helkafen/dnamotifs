@@ -17,6 +17,8 @@ import           Control.Monad (forM_)
 --import           System.IO (appendFile)
 import           TextShow (showt)
 import           Data.Time.Clock.POSIX (getPOSIXTime, POSIXTime)
+import           Control.Parallel.Strategies (parMap, rdeepseq)
+
 
 import Types
 import Bed (readPeaks)
@@ -64,12 +66,12 @@ hasVariantRight x | x == geno00 = False
 
 
 variantsToDiffs :: [Variant] -> Data.Map.Map (Int, Haplotype) (V.Vector Diff)
-variantsToDiffs variants = fmap (V.modify sort) $ Data.Map.fromListWith (<>) (V.toList $ V.map (\(i, h, d) -> ((i,h), V.singleton d)) allDiffs)
-    where allDiffs = V.concatMap variantToDiffs (V.fromList variants) :: V.Vector (Int, Haplotype, Diff)
+variantsToDiffs variants = V.modify sort <$> Data.Map.fromListWith (<>) (V.toList $ V.map (\(i, h, d) -> ((i,h), V.singleton d)) allDiffs)
+    where allDiffs = V.concat (parMap rdeepseq variantToDiffs variants) :: V.Vector (Int, Haplotype, Diff)
 
 
 variantToDiffs :: Variant -> V.Vector (Int, Haplotype, Diff)
-variantToDiffs v = V.map (\i -> (i, HaploLeft, d)) (STO.convert (STO.map fromIntegral (genotypesL v))) <> V.map (\i -> (i, HaploRight, d)) (STO.convert (STO.map fromIntegral (genotypesR v)))
+variantToDiffs v = V.map (\i -> (i, HaploLeft, d)) (STO.convert (genotypesL v)) <> V.map (\i -> (i, HaploRight, d)) (STO.convert (genotypesR v))
     where d = Diff (position v) (reference v) (alternative v)
 
 

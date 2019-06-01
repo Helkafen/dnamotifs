@@ -26,9 +26,13 @@ import           Data.Word (Word8)
 import           Foreign.Storable.Generic
 import           GHC.Generics
 import           TextShow
+import           Control.DeepSeq
 
 data Haplotype = HaploLeft | HaploRight
-    deriving (Eq, Ord, Show)
+    deriving (Eq, Ord, Show, Generic)
+
+instance NFData Haplotype
+
 
 data Pweight = Pweight {
     wa :: Float,
@@ -102,17 +106,23 @@ data BaseSequencePosition = BaseSequencePosition {-# UNPACK #-} !BaseSequence {-
     deriving (Eq, Show)
 
 newtype Chromosome = Chromosome { unChr :: Text }
-  deriving (Eq, Show)
+  deriving (Eq, Show, Generic)
+
+instance NFData Chromosome
 
 
 -- Zero based position
 newtype Position0 = Position Int
-  deriving (Eq, Ord, Show, Num, Enum, Real, Integral, STO.Storable)
+  deriving (Eq, Ord, Show, Num, Enum, Real, Integral, STO.Storable, Generic)
 
-  
+instance NFData Position0
+
 -- The ID of a person
 newtype SampleId = SampleId Text
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Generic)
+
+instance NFData SampleId
+
 
 instance TextShow SampleId where
   showb (SampleId s) = showb s
@@ -125,10 +135,12 @@ data Variant = Variant {
     variantId :: !(Maybe Text),
     reference :: !BaseSequence,
     alternative :: !BaseSequence,
-    genotypesL :: !(STO.Vector CInt),
-    genotypesR :: !(STO.Vector CInt),
+    genotypesL :: !(STO.Vector Int),
+    genotypesR :: !(STO.Vector Int),
     sampleIds :: !(V.Vector SampleId)
-} deriving (Eq, Show)
+} deriving (Eq, Show, Generic)
+
+instance NFData Variant
 
 showBaseSequence :: BaseSequence -> String
 showBaseSequence = map tr . B.unpack
@@ -140,10 +152,15 @@ showBaseSequence = map tr . B.unpack
         tr _ = '_'
 
 data Diff = Diff !Position0 !BaseSequence !BaseSequence -- pos, ref, alt
-  deriving (Eq, Ord) -- Keep Position in the first place. We need it for the default ordering
+  deriving (Eq, Ord, Generic) -- Keep Position in the first place. We need it for the default ordering
+
+instance NFData Diff
+
 
 instance Show Diff where
   show (Diff (Position p) ref alt) = "Diff " <> show p <> ": " <> showBaseSequence ref <> "->" <> showBaseSequence alt
 
 data Error = ParsingError Text | MissingFile FilePath | NoVariantFound FilePath
-  deriving (Eq, Show)
+  deriving (Eq, Show, Generic)
+
+instance NFData Error

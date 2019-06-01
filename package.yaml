@@ -29,6 +29,8 @@ dependencies:
 - derive-storable-plugin
 - text-show
 - vector-algorithms
+- parallel
+- deepseq
 
 ghc-options:
   - -Wall

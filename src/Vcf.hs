@@ -33,7 +33,7 @@ import           System.IO.Unsafe (unsafePerformIO)
 import           Foreign.C.Types                 (CInt)
 import           Foreign                         (Ptr, FunPtr)
 import           Foreign.ForeignPtr              (newForeignPtr)
-import           Control.Parallel.Strategies (parMap, rdeepseq)
+import           Control.Parallel.Strategies (using, parBuffer, rdeepseq)
 
 import Types
 
@@ -116,7 +116,7 @@ sampleIdsInHeader header = V.fromList $ map (SampleId . decodeUtf8With ignore) $
 parseVcfContent :: [(Position0, Position0)] -> [B.ByteString] -> Either Error [Variant]
 parseVcfContent regions vcfLines = case vcfLines of
     [] -> Left $ ParsingError "Empty vcf file"
-    (header:rest) -> pure $ rights $ parMap rdeepseq (parseVariant sampleIdentifiers) (filterOrderedIntervals pos regions rest) -- TODO: exception for a left
+    (header:rest) -> pure $ rights (map (parseVariant sampleIdentifiers) (filterOrderedIntervals pos regions rest) `using` (parBuffer 4 rdeepseq))-- TODO: exception for a left
         where sampleIdentifiers = sampleIdsInHeader header
               pos :: B.ByteString -> Position0
               pos = Position . (\p -> p - 1) . fromRight (error "Bad position in vcf") . parseInt . B.takeWhile (/= tab) . B.drop 1  . B.dropWhile (/= tab)

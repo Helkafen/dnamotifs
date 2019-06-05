@@ -19,7 +19,7 @@ import Lib
 import Fasta (takeRef)
 import Vcf (parseVariant, filterOrderedIntervals, parseVcfContent, fillVector)
 import Bed (parseBedContent)
-import MotifDefinition (parseMotifsContent)
+import MotifDefinition (parseHomerMotifsContent, parseHocomocoMotifsContent)
 
 mkSeq :: [Nucleotide] -> B.ByteString
 mkSeq = B.pack . map unNuc
@@ -47,7 +47,7 @@ test_patterns_basic = do
   where inputData =  [BaseSequencePosition inputDataSample0 inputDataPositions]
 
         inputDataPositions :: STO.Vector CInt
-        inputDataPositions = STO.fromList $ map fromIntegral $ take (B.length inputDataSample0) [0..]
+        inputDataPositions = STO.fromList $ map fromIntegral $ take (B.length inputDataSample0) [(0::CInt)..]
 
         patterns = [pattern_CG]
 
@@ -58,7 +58,7 @@ test_patterns_basic2 = do
     matches <- findPatternsInBlock 500 (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns)
     assertEqual expected matches
   where inputData =  [BaseSequencePosition inputDataSample0 inputDataPositions]
-        inputDataPositions = STO.fromList $ take (B.length inputDataSample0) (map fromIntegral [0..])
+        inputDataPositions = STO.fromList $ take (B.length inputDataSample0) [(0::CInt)..]
 
         patterns = [pattern_CG, pattern_cCGA]
 
@@ -74,7 +74,7 @@ test_patterns_1 = do
 
         inputData =  [BaseSequencePosition inputDataSample0 inputDataPositions, BaseSequencePosition inputDataSample1 inputDataPositions] ++ replicate (numberOfPeople - 2) (BaseSequencePosition inputDataSample2 inputDataPositions)
 
-        inputDataPositions = STO.fromList $ take (B.length inputDataSample0) (map fromIntegral [0..])
+        inputDataPositions = STO.fromList $ take (B.length inputDataSample0) [(0::CInt)..]
 
         patterns = [pattern_CG, pattern_cCGA, pattern_CGA] ++ replicate 50 pattern_cccccccccc ++ [pattern_CG]
 
@@ -96,7 +96,7 @@ test_patterns_2 = do
 
         inputData =  [BaseSequencePosition inputDataSample0 inputDataPositions, BaseSequencePosition inputDataSample1 (STO.map (+7) inputDataPositions)] ++ replicate (numberOfPeople - 2) (BaseSequencePosition inputDataSample2 inputDataPositions)
 
-        inputDataPositions = STO.fromList $ take (B.length inputDataSample0) (map fromIntegral [10..])
+        inputDataPositions = STO.fromList $ take (B.length inputDataSample0) [(10::CInt)..]
 
         patterns = [pattern_CG, pattern_cCGA, pattern_CGA] ++ replicate 50 pattern_cccccccccc ++ [pattern_CG]
 
@@ -117,7 +117,7 @@ test_patterns_padding = do
   where numberOfPeople = 1000 :: Int
 
         inputData =  [BaseSequencePosition (B.take 5 inputDataSample0) (STO.take 5 inputDataPositions), BaseSequencePosition inputDataSample1 inputDataPositions] ++ replicate (numberOfPeople - 2) (BaseSequencePosition (B.take 10 inputDataSample2) (STO.take 10 inputDataPositions))
-        inputDataPositions = STO.fromList $ take (B.length inputDataSample0) (map fromIntegral [10..])
+        inputDataPositions = STO.fromList $ take (B.length inputDataSample0) [(10::CInt)..]
 
         patterns = [pattern_CG, pattern_cCGA, pattern_CGA] ++ replicate 50 pattern_cccccccccc ++ [pattern_CG]
 
@@ -257,14 +257,20 @@ test_parseBed_1 = do
   assertEqual expected parsed
 
 motifString :: T.Text
-motifString = T.replace "   " "\t" (motifString1 <> motifString2)
-  where motifString1 = ">ATGACTCATC\tAP-1(bZIP)/ThioMac-PU.1-ChIP-Seq(GSE21512)/Homer        6.049537        -1.782996e+03   0       9805.3,5781.0,3085.1,5.0,-- 0.00e+00\n0.419\t0.275\t0.277\t0.028\n0.001\t0.001\t0.001\t0.997\n"
-        motifString2 = ">SCCTSAGGSCAW\tAP-2gamma(AP2)/MCF7-TFAP2C-ChIP-Seq(GSE21234)/Homer     6.349794        -24627.169865   0       T:26194.0(44.86%),413.7-- (9.54%),P:1e-10695\n0.005\t0.431\t0.547\t0.017\n0.001\t0.997\t0.001\t0.001\n0.001\t0.947\t0.001\t0.051"
+motifString = T.replace "   " "\t" (m1 <> m2)
+  where m1 = ">ATGACTCATC\tAP-1(bZIP)/ThioMac-PU.1-ChIP-Seq(GSE21512)/Homer        6.049537        -1.782996e+03   0       9805.3,5781.0,3085.1,5.0,-- 0.00e+00\n0.419\t0.275\t0.277\t0.028\n0.001\t0.001\t0.001\t0.997\n"
+        m2 = ">SCCTSAGGSCAW\tAP-2gamma(AP2)/MCF7-TFAP2C-ChIP-Seq(GSE21234)/Homer     6.349794        -24627.169865   0       T:26194.0(44.86%),413.7-- (9.54%),P:1e-10695\n0.005\t0.431\t0.547\t0.017\n0.001\t0.997\t0.001\t0.001\n0.001\t0.947\t0.001\t0.051"
+
+motifString2 :: T.Text
+motifString2 = T.replace "   " "\t" (m1 <> m2 <> m3)
+  where m1 = "ALX1_HUMAN.H11MO.0.B\n"
+        m2 ="13.541814946619212   6.481316725978635   8.467081850533816   2.5097864768683276\n"
+        m3 = "1.9857651245551615   2.9786476868327387   0.0   26.03558718861208"
 
 
 test_motif_parser_1 :: IO ()
 test_motif_parser_1 = do
-  let parsed = parseMotifsContent motifString
+  let parsed = parseHomerMotifsContent motifString
   let expected1 = ("AP-1", [Pweight{wa = 0.419, wc = 0.275, wg = 0.277, wt = 2.8e-2}, Pweight{wa = 1.0e-3, wc = 1.0e-3, wg = 1.0e-3, wt = 0.997}])
   let expected2 = ("AP-2gamma", [Pweight{wa = 5.0e-3, wc = 0.431, wg = 0.547, wt = 1.7e-2}
                                , Pweight{wa = 1.0e-3, wc = 0.997, wg = 1.0e-3, wt = 1.0e-3}
@@ -272,11 +278,19 @@ test_motif_parser_1 = do
 
   assertEqual (Right [expected1, expected2]) parsed
 
+test_motif_parser_2 :: IO ()
+test_motif_parser_2 = do
+  let parsed = parseHocomocoMotifsContent motifString2
+  let expected = ("ALX1_HUMAN.H11MO.0.B", [Pweight{wa = 0.4368327, wc = 0.20907472, wg = 0.2731316725978651, wt = 0.08096085}
+                                          ,Pweight{wa = 6.405694e-2, wc = 9.608541e-2, wg = 0, wt = 0.83985764}])
+  assertEqual (Right [expected]) parsed
+
+
 test_variantsToDiffs_1 :: IO ()
 test_variantsToDiffs_1 = do
   let sampleIdentifiers = G.fromList [SampleId "sample1", SampleId "sample2"]
-  let variant = Variant (Chromosome "1") (Position 69080) (Just "1:69081:G:C") (mkSeq [c]) (mkSeq [g]) (G.fromList [0]) (G.fromList [1]) sampleIdentifiers
-  let diffs = variantsToDiffs [variant]
+  let var = Variant (Chromosome "1") (Position 69080) (Just "1:69081:G:C") (mkSeq [c]) (mkSeq [g]) (G.fromList [0]) (G.fromList [1]) sampleIdentifiers
+  let diffs = variantsToDiffs [var]
   let expected = Data.Map.fromList [((0,HaploLeft), V.fromList [Diff (Position 69080) (mkSeq [c]) (mkSeq [g])])
                                    ,((1,HaploRight),V.fromList [Diff (Position 69080) (mkSeq [c]) (mkSeq [g])])] :: Data.Map.Map (Int, Haplotype) (V.Vector Diff)
   assertEqual expected diffs

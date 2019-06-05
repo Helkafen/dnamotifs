@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module MotifDefinition where
+module MotifDefinition (loadHocomocoMotifs, loadHomerMotifs, parseHomerMotifsContent, parseHocomocoMotifsContent) where
 
 import           Data.Attoparsec.Text
 import qualified Data.Text as T
@@ -9,29 +9,59 @@ import           Data.Either (partitionEithers)
 
 import Types
 
-loadMotifs :: FilePath -> IO [(T.Text, Pattern)]
-loadMotifs path = do putStr ("Load motif file " <> path <> " ... ")
-                     content <- TIO.readFile path
-                     case parseMotifsContent content of
-                        Left errors -> print (show errors) >> error ("Motif loading error")
-                        Right patterns -> putStrLn ("Done") >> return patterns
 
+loadHocomocoMotifs :: FilePath -> IO [(T.Text, Pattern)]
+loadHocomocoMotifs path = do putStr ("Load motif file " <> path <> " ... ")
+                             content <- TIO.readFile path
+                             case parseHocomocoMotifsContent content of
+                                Left errors -> print (show errors) >> error ("Motif loading error")
+                                Right patterns -> putStrLn ("Done") >> return patterns
 
-parseMotifsContent :: T.Text -> Either [String] [(T.Text, Pattern)]
-parseMotifsContent content = 
+loadHomerMotifs :: FilePath -> IO [(T.Text, Pattern)]
+loadHomerMotifs path = do putStr ("Load motif file " <> path <> " ... ")
+                          content <- TIO.readFile path
+                          case parseHomerMotifsContent content of
+                            Left errors -> print (show errors) >> error ("Motif loading error")
+                            Right patterns -> putStrLn ("Done") >> return patterns
+
+parseHocomocoMotifsContent :: T.Text -> Either [String] [(T.Text, Pattern)]
+parseHocomocoMotifsContent content =
     let paragraphs =  filter ((>0) . T.length) $ T.splitOn ">" content
-        parsed = map (parseOnly patternParser) paragraphs
+        parsed = map (parseOnly hocomocoPatternParser) paragraphs
     in case partitionEithers parsed of
             ([], patterns) -> Right patterns
             (errors, _) -> Left errors
 
-patternParser :: Parser (T.Text, Pattern)
-patternParser = do
+parseHomerMotifsContent :: T.Text -> Either [String] [(T.Text, Pattern)]
+parseHomerMotifsContent content =
+    let paragraphs =  filter ((>0) . T.length) $ T.splitOn ">" content
+        parsed = map (parseOnly homerPatternParser) paragraphs
+    in case partitionEithers parsed of
+            ([], patterns) -> Right patterns
+            (errors, _) -> Left errors
+
+hocomocoPatternParser :: Parser (T.Text, Pattern)
+hocomocoPatternParser = do
+    name <- takeWhile1 (/= '\n')  <* char '\n'
+    weights <- weightsParserHocomoco `sepBy` char '\n' 
+    pure (name, weights)
+
+homerPatternParser :: Parser (T.Text, Pattern)
+homerPatternParser = do
     _ <- takeWhile1 (/= '\t')
     name <- char '\t' *> takeWhile1 (/= '(')
     _ <- takeWhile1 (/= '\n') <* char '\n'
-    weights <- weightsParser `sepBy` char '\n' 
+    weights <- weightsParser `sepBy` char '\n'
     pure (name, weights)
+
+weightsParserHocomoco :: Parser Pweight
+weightsParserHocomoco = do
+    aWeight <- realToFrac <$> (double <* char '\t')
+    cWeight <- realToFrac <$> (double <* char '\t')
+    gWeight <- realToFrac <$> (double <* char '\t')
+    tWeight <- realToFrac <$> double
+    let total = aWeight + cWeight + gWeight + tWeight
+    pure (Pweight (aWeight / total) (cWeight / total) (gWeight / total) (tWeight / total))
 
 weightsParser :: Parser Pweight
 weightsParser = do
@@ -40,7 +70,6 @@ weightsParser = do
     gWeight <- realToFrac <$> (double <* char '\t')
     tWeight <- realToFrac <$> double
     pure (Pweight aWeight cWeight gWeight tWeight)
-
 -- >ATGACTCATC     AP-1(bZIP)/ThioMac-PU.1-ChIP-Seq(GSE21512)/Homer        6.049537        -1.782996e+03   0       9805.3,5781.0,3085.1,2715.0,-- 0.00e+00
 -- 0.419   0.275   0.277   0.028
 -- 0.001   0.001   0.001   0.997

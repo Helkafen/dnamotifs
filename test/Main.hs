@@ -19,7 +19,7 @@ import Lib
 import Fasta (takeRef)
 import Vcf (parseVariant, filterOrderedIntervals, parseVcfContent, fillVector)
 import Bed (parseBedContent)
-import MotifDefinition (parseHomerMotifsContent, parseHocomocoMotifsContent)
+import MotifDefinition (parseHocomocoMotifsContent)
 
 mkSeq :: [Nucleotide] -> B.ByteString
 mkSeq = B.pack . map unNuc
@@ -33,42 +33,41 @@ inputDataSample1 = mkSeq [c,g,a,a,a,a,a] <> B.replicate 93 (unNuc a)
 inputDataSample2 :: B.ByteString
 inputDataSample2 = mkSeq [a,a,a,a,a,a,a] <> B.replicate 93 (unNuc a)
 
-pattern_CG, pattern_cCGA, pattern_CGA, pattern_cccccccccc :: [Pweight]
-pattern_CG = [Pweight 0 1 0 0, Pweight 0 0 1 0]
-pattern_cCGA = [Pweight 0 0.1 0 0, Pweight 0 1 0 0, Pweight 0 0 1 0, Pweight 0.5 0 0 0]
-pattern_CGA = [Pweight 0 1 0 0, Pweight 0 0 1 0]
+pattern_CG, pattern_cCGA, pattern_cccccccccc :: [Pweight]
+pattern_CG = [Pweight 0 1000 0 0, Pweight 0 0 1000 0]
+pattern_cCGA = [Pweight 0 100 0 0, Pweight 0 1000 0 0, Pweight 0 0 1000 0, Pweight 500 0 0 0]
 pattern_cccccccccc = [cPattern, cPattern, cPattern, cPattern, cPattern, cPattern, cPattern, cPattern, cPattern, cPattern]
-  where cPattern = Pweight 0 0 0.001 0
+  where cPattern = Pweight 0 0 1 0
 
 test_patterns_basic :: IO ()
 test_patterns_basic = do
-    matches <- findPatternsInBlock 500 (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns)
+    matches <- findPatternsInBlock (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns)
     assertEqual expected matches
   where inputData =  [BaseSequencePosition inputDataSample0 inputDataPositions]
 
         inputDataPositions :: STO.Vector CInt
         inputDataPositions = STO.fromList $ map fromIntegral $ take (B.length inputDataSample0) [(0::CInt)..]
 
-        patterns = [pattern_CG]
+        patterns = [Pattern 2000 pattern_CG]
 
-        expected = V.fromList [Match {mPatternId = 0,  mScore = 1000, mPosition = 4, mSampleId = 0, mMatched = [c,g]}]
+        expected = V.fromList [Match {mPatternId = 0,  mScore = 2000, mPosition = 4, mSampleId = 0, mMatched = [c,g]}]
 
 test_patterns_basic2 :: IO ()
 test_patterns_basic2 = do
-    matches <- findPatternsInBlock 500 (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns)
+    matches <- findPatternsInBlock (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns)
     assertEqual expected matches
   where inputData =  [BaseSequencePosition inputDataSample0 inputDataPositions]
         inputDataPositions = STO.fromList $ take (B.length inputDataSample0) [(0::CInt)..]
 
-        patterns = [pattern_CG, pattern_cCGA]
+        patterns = [Pattern 2000 pattern_CG, Pattern 900 pattern_cCGA]
 
-        expected = V.fromList [Match {mPatternId = 1, mScore = 961,  mPosition = 3, mSampleId = 0, mMatched = [a, c, g, a]},
-                                    Match {mPatternId = 0, mScore = 1000, mPosition = 4, mSampleId = 0, mMatched = [c,g]}]
+        expected = V.fromList [Match {mPatternId = 1, mScore = 2500,  mPosition = 3, mSampleId = 0, mMatched = [a, c, g, a]},
+                               Match {mPatternId = 0, mScore = 2000, mPosition = 4, mSampleId = 0, mMatched = [c,g]}]
 
 
 test_patterns_1 :: IO ()
 test_patterns_1 = do
-    matches <- findPatternsInBlock 500 (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns)
+    matches <- findPatternsInBlock (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns)
     assertEqual (V.fromList  expected) matches
   where numberOfPeople = 1000 :: Int
 
@@ -76,21 +75,19 @@ test_patterns_1 = do
 
         inputDataPositions = STO.fromList $ take (B.length inputDataSample0) [(0::CInt)..]
 
-        patterns = [pattern_CG, pattern_cCGA, pattern_CGA] ++ replicate 50 pattern_cccccccccc ++ [pattern_CG]
+        patterns = [Pattern 2000 pattern_CG, Pattern 900 pattern_cCGA] ++ replicate 50 (Pattern 10000 pattern_cccccccccc) ++ [Pattern 2000 pattern_CG]
 
-        expected = [Match {mPatternId = 1,  mScore = 961,  mPosition = 3, mSampleId = 0, mMatched = [a, c, g, a]},
-                    Match {mPatternId = 0,  mScore = 1000, mPosition = 4, mSampleId = 0, mMatched = [c, g]},
-                    Match {mPatternId = 2,  mScore = 1000, mPosition = 4, mSampleId = 0, mMatched = [c, g]},
-                    Match {mPatternId = 53, mScore = 1000, mPosition = 4, mSampleId = 0, mMatched = [c, g]},
-                    Match {mPatternId = 0,  mScore = 1000, mPosition = 0, mSampleId = 1, mMatched = [c, g]},
-                    Match {mPatternId = 2,  mScore = 1000, mPosition = 0, mSampleId = 1, mMatched = [c, g]},
-                    Match {mPatternId = 53, mScore = 1000, mPosition = 0, mSampleId = 1, mMatched = [c, g]}]
+        expected = [Match {mPatternId = 1,  mScore = 2500, mPosition = 3, mSampleId = 0, mMatched = [a, c, g, a]},
+                    Match {mPatternId = 0,  mScore = 2000, mPosition = 4, mSampleId = 0, mMatched = [c, g]},
+                    Match {mPatternId = 52, mScore = 2000, mPosition = 4, mSampleId = 0, mMatched = [c, g]},
+                    Match {mPatternId = 0,  mScore = 2000, mPosition = 0, mSampleId = 1, mMatched = [c, g]},
+                    Match {mPatternId = 52, mScore = 2000, mPosition = 0, mSampleId = 1, mMatched = [c, g]}]
 
 
 -- Check that the Matches contain the reference position, not the real position
 test_patterns_2 :: IO ()
 test_patterns_2 = do
-    matches <- findPatternsInBlock 500 (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns)
+    matches <- findPatternsInBlock (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns)
     assertEqual (V.fromList  expected) matches
   where numberOfPeople = 1000 :: Int
 
@@ -98,35 +95,32 @@ test_patterns_2 = do
 
         inputDataPositions = STO.fromList $ take (B.length inputDataSample0) [(10::CInt)..]
 
-        patterns = [pattern_CG, pattern_cCGA, pattern_CGA] ++ replicate 50 pattern_cccccccccc ++ [pattern_CG]
+        patterns = [Pattern 2000 pattern_CG, Pattern 900 pattern_cCGA] ++ replicate 50 (Pattern 10000 pattern_cccccccccc) ++ [Pattern 2000 pattern_CG]
 
-        expected = [Match {mPatternId = 1,  mScore = 961,  mPosition = 13,     mSampleId = 0, mMatched = [a, c, g, a]},
-                    Match {mPatternId = 0,  mScore = 1000, mPosition = 14,     mSampleId = 0, mMatched = [c, g]},
-                    Match {mPatternId = 2,  mScore = 1000, mPosition = 14,     mSampleId = 0, mMatched = [c, g]},
-                    Match {mPatternId = 53, mScore = 1000, mPosition = 14,     mSampleId = 0, mMatched = [c, g]},
-                    Match {mPatternId = 0,  mScore = 1000, mPosition = 10 + 7, mSampleId = 1, mMatched = [c, g]},
-                    Match {mPatternId = 2,  mScore = 1000, mPosition = 10 + 7, mSampleId = 1, mMatched = [c, g]},
-                    Match {mPatternId = 53, mScore = 1000, mPosition = 10 + 7, mSampleId = 1, mMatched = [c, g]}]
+        expected = [Match {mPatternId = 1,  mScore = 2500, mPosition = 13,     mSampleId = 0, mMatched = [a, c, g, a]},
+                    Match {mPatternId = 0,  mScore = 2000, mPosition = 14,     mSampleId = 0, mMatched = [c, g]},
+                    Match {mPatternId = 52, mScore = 2000, mPosition = 14,     mSampleId = 0, mMatched = [c, g]},
+                    Match {mPatternId = 0,  mScore = 2000, mPosition = 10 + 7, mSampleId = 1, mMatched = [c, g]},
+                    Match {mPatternId = 52, mScore = 2000, mPosition = 10 + 7, mSampleId = 1, mMatched = [c, g]}]
 
 
 -- Check that the end of the chromosome is padded with N
 test_patterns_padding :: IO ()
 test_patterns_padding = do
-    matches <- findPatternsInBlock 500 (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns)
+    matches <- findPatternsInBlock (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns)
     assertEqual (V.fromList  expected) matches
   where numberOfPeople = 1000 :: Int
 
         inputData =  [BaseSequencePosition (B.take 5 inputDataSample0) (STO.take 5 inputDataPositions), BaseSequencePosition inputDataSample1 inputDataPositions] ++ replicate (numberOfPeople - 2) (BaseSequencePosition (B.take 10 inputDataSample2) (STO.take 10 inputDataPositions))
         inputDataPositions = STO.fromList $ take (B.length inputDataSample0) [(10::CInt)..]
 
-        patterns = [pattern_CG, pattern_cCGA, pattern_CGA] ++ replicate 50 pattern_cccccccccc ++ [pattern_CG]
+        patterns = [Pattern 1000 pattern_CG, Pattern 1000 pattern_cCGA, Pattern 1000 pattern_CG]
 
-        expected = [Match{mPatternId = 0,  mScore = 500,  mPosition = 14, mSampleId = 0, mMatched = [c]},
-                    Match{mPatternId = 2,  mScore = 500,  mPosition = 14, mSampleId = 0, mMatched = [c]},
-                    Match{mPatternId = 53, mScore = 500,  mPosition = 14, mSampleId = 0, mMatched = [c]},
-                    Match{mPatternId = 0,  mScore = 1000, mPosition = 10, mSampleId = 1, mMatched = [c, g]},
-                    Match{mPatternId = 2,  mScore = 1000, mPosition = 10, mSampleId = 1, mMatched = [c, g]},
-                    Match{mPatternId = 53, mScore = 1000, mPosition = 10, mSampleId = 1, mMatched = [c, g]}]
+        expected = [Match{mPatternId = 1, mScore = 1000, mPosition = 13, mSampleId = 0, mMatched = [a, c]},
+                    Match{mPatternId = 0, mScore = 1000, mPosition = 14, mSampleId = 0, mMatched = [c]},
+                    Match{mPatternId = 2, mScore = 1000, mPosition = 14, mSampleId = 0, mMatched = [c]},
+                    Match{mPatternId = 0, mScore = 2000, mPosition = 10, mSampleId = 1, mMatched = [c, g]},
+                    Match{mPatternId = 2, mScore = 2000, mPosition = 10, mSampleId = 1, mMatched = [c, g]}]
 
 
 refGenome :: Int -> Int -> BaseSequencePosition
@@ -152,8 +146,7 @@ test_apply_variant_4 :: IO ()
 test_apply_variant_4 = do
   let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 100 (mkSeq [a]) (mkSeq [c])]
   assertEqual (BaseSequencePosition (mkSeq [c,g]) (STO.fromList [1,2])) patched
-----prop_reverse :: [Int] -> Bool
-----prop_reverse xs = xs == (myReverse (myReverse xs))
+
 test_apply_variant_5 :: IO ()
 test_apply_variant_5 = do
   let patched = applyVariants refGenome (Position 1) (Position 2) [Diff 1 (mkSeq [c]) (mkSeq [n])]
@@ -256,33 +249,18 @@ test_parseBed_1 = do
   let expected = Right [(Position 5, Position 6), (Position 8, Position 10)]
   assertEqual expected parsed
 
+
 motifString :: T.Text
-motifString = T.replace "   " "\t" (m1 <> m2)
-  where m1 = ">ATGACTCATC\tAP-1(bZIP)/ThioMac-PU.1-ChIP-Seq(GSE21512)/Homer        6.049537        -1.782996e+03   0       9805.3,5781.0,3085.1,5.0,-- 0.00e+00\n0.419\t0.275\t0.277\t0.028\n0.001\t0.001\t0.001\t0.997\n"
-        m2 = ">SCCTSAGGSCAW\tAP-2gamma(AP2)/MCF7-TFAP2C-ChIP-Seq(GSE21234)/Homer     6.349794        -24627.169865   0       T:26194.0(44.86%),413.7-- (9.54%),P:1e-10695\n0.005\t0.431\t0.547\t0.017\n0.001\t0.997\t0.001\t0.001\n0.001\t0.947\t0.001\t0.051"
-
-motifString2 :: T.Text
-motifString2 = T.replace "   " "\t" (m1 <> m2 <> m3)
+motifString = T.replace "   " "\t" (m1 <> m2 <> m3)
   where m1 = "ALX1_HUMAN.H11MO.0.B\n"
-        m2 ="13.541814946619212   6.481316725978635   8.467081850533816   2.5097864768683276\n"
+        m2 ="0.5145001398573071   -0.15943627836250168   0.08001130176246185   -0.9383465141290595\n"
         m3 = "1.9857651245551615   2.9786476868327387   0.0   26.03558718861208"
-
 
 test_motif_parser_1 :: IO ()
 test_motif_parser_1 = do
-  let parsed = parseHomerMotifsContent motifString
-  let expected1 = ("AP-1", [Pweight{wa = 0.419, wc = 0.275, wg = 0.277, wt = 2.8e-2}, Pweight{wa = 1.0e-3, wc = 1.0e-3, wg = 1.0e-3, wt = 0.997}])
-  let expected2 = ("AP-2gamma", [Pweight{wa = 5.0e-3, wc = 0.431, wg = 0.547, wt = 1.7e-2}
-                               , Pweight{wa = 1.0e-3, wc = 0.997, wg = 1.0e-3, wt = 1.0e-3}
-                               , Pweight{wa = 1.0e-3, wc = 0.947, wg = 1.0e-3, wt = 5.1e-2}])
-
-  assertEqual (Right [expected1, expected2]) parsed
-
-test_motif_parser_2 :: IO ()
-test_motif_parser_2 = do
-  let parsed = parseHocomocoMotifsContent motifString2
-  let expected = ("ALX1_HUMAN.H11MO.0.B", [Pweight{wa = 0.4368327, wc = 0.20907472, wg = 0.2731316725978651, wt = 0.08096085}
-                                          ,Pweight{wa = 6.405694e-2, wc = 9.608541e-2, wg = 0, wt = 0.83985764}])
+  let parsed = parseHocomocoMotifsContent motifString
+  let expected = ("ALX1_HUMAN.H11MO.0.B", [Pweight{wa = 515, wc = -159, wg = 80, wt = -938}
+                                          ,Pweight{wa = 1986, wc = 2979, wg = 0, wt = 26036}])
   assertEqual (Right [expected]) parsed
 
 

@@ -3,7 +3,7 @@
 module Types (
   Haplotype(..),
   Pweight(..),
-  Pattern,
+  Pattern(..),
   Match(..),
   Nucleotide(..), n, a, c, g, t, toNuc,
   Genotype, geno00, geno01, geno10, geno11, -- Do not export the data constructor to forbid the creation of illegal values
@@ -35,17 +35,20 @@ instance NFData Haplotype
 
 
 data Pweight = Pweight {
-    wa :: Float,
-    wc :: Float,
-    wg :: Float,
-    wt :: Float
+    wa :: CInt, -- 1000 times the score in the PWM file
+    wc :: CInt,
+    wg :: CInt,
+    wt :: CInt
 } deriving (Eq, Show)
 
-type Pattern = [Pweight]
+data Pattern = Pattern {
+  patternMinScore :: Int,     -- 1000 times the float score
+  patternWeights :: [Pweight]
+} deriving (Eq, Show)
 
 data Match = Match {
     mPatternId :: !Int, -- 0 based
-    mScore :: !Int,     -- 0 - 1000
+    mScore :: !Int,   -- 1000 times the float score
     mPosition :: !Int,  -- 0 based
     mSampleId :: !Int,
     mMatched :: ![Nucleotide]

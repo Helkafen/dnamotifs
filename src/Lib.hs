@@ -155,7 +155,7 @@ processPeak chr minScore patterns takeReferenceGenome samples (peakStart, peakEn
     let noDiff = []
     let block = mkNucleotideAndPositionBlock (map (applyVariants takeReferenceGenome peakStart peakEnd) ((V.toList <$> uniqueDiffs) ++ noDiff))
     let numberOfHaplotypes = length uniqueDiffs + 1 -- 1 for the reference haplotype
-    matches <- findPatternsInBlock minScore block patterns
+    matches <- findPatternsInBlock block patterns
 
     -- Recover the [(SampleId, Haplotype)] of each match and print
     forM_ (V.toList matches) $ \match -> do

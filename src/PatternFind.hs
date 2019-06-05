@@ -36,10 +36,9 @@ list4uple xs = let (x,rest) = splitAt 34 xs in x:list4uple rest
 
 
 patternToVector :: Pattern -> STO.Vector CInt
-patternToVector p = STO.fromList [fromIntegral $ length p, sum (map (floor . (*1000) . m) p)] <> mconcat (map step p)
+patternToVector (Pattern minScore weights) = STO.fromList [fromIntegral $ length weights, fromIntegral minScore] <> mconcat (map step weights)
     where
-    step x = STO.map (floor . (*1000)) (STO.fromList [0, wa x, wc x, wg x, wt x, m x]) -- 0 For "N"
-    m x = maximum [wa x, wc x, wg x, wt x]
+    step x = STO.fromList [0, wa x, wc x, wg x, wt x] -- 0 For "N"
 
 pad :: STO.Storable a => a -> Int -> STO.Vector a -> STO.Vector a
 pad e len v = v <> padding
@@ -70,8 +69,8 @@ C.include "<string.h>"
 
 foreign import ccall "&free" freePtr :: FunPtr (Ptr CInt-> IO ())
 
-findPatterns :: CInt -> CInt -> CInt -> B.ByteString -> STO.Vector CInt -> STO.Vector CInt -> Ptr CInt -> IO (Ptr CInt)
-findPatterns min_score sample_size block_size vec pos pat res_size = [C.block| int* {
+findPatterns :: CInt -> CInt -> B.ByteString -> STO.Vector CInt -> STO.Vector CInt -> Ptr CInt -> IO (Ptr CInt)
+findPatterns sample_size block_size vec pos pat res_size = [C.block| int* {
     typedef struct Match {
         int score;
         int pattern;
@@ -89,7 +88,6 @@ findPatterns min_score sample_size block_size vec pos pat res_size = [C.block| i
         int matched[30];
     } MatchRecord;
 
-    int min_score = $(int min_score);
     int sample_size = $(int sample_size);
     int block_size = $(int block_size);
     int* patterns = $vec-ptr:(int *pat);
@@ -111,8 +109,8 @@ findPatterns min_score sample_size block_size vec pos pat res_size = [C.block| i
             int pattern_length = -1;
             while (1) {
                 pattern_length = patterns[k]; k = k + 1;
-                int score_union = patterns[k]; k = k + 1;
-                int score_inter = 0;
+                int min_score = patterns[k]; k = k + 1;
+                int score = 0;
                 
                 // End of pattern list
                 if (pattern_length <= 0) {
@@ -123,17 +121,16 @@ findPatterns min_score sample_size block_size vec pos pat res_size = [C.block| i
                 const int max_index = bound1 < pattern_length ? bound1 : pattern_length;
             
                 // Hotspot loop
-                for (j = 0; j < max_index; k = k + 6, j++) {
-                    score_inter += patterns[k + in[i + j]];
+                for (j = 0; j < max_index; k = k + 5, j++) {
+                    score += patterns[k + in[i + j]];
                 }
 
                 // Move to the next pattern anyway if j was restricted by the size of the block
                 if(bound1 == max_index) {
-                    k -= j*6;
-                    k += pattern_length*6;
+                    k -= j*5;
+                    k += pattern_length*5;
                 }
 
-                int score = (1000 * score_inter) / score_union;
                 if(score >= min_score) {
                     struct Match *match = malloc (sizeof (struct Match));
                     if (match == 0) {
@@ -202,10 +199,10 @@ findPatterns min_score sample_size block_size vec pos pat res_size = [C.block| i
     } |]
 
 
-findPatternsInBlock :: Int -> NucleotideAndPositionBlock -> Patterns -> IO (V.Vector Match)
-findPatternsInBlock minScore (NucleotideAndPositionBlock numberOfPeople block_size inputData positionData) (Patterns patternData) = do
+findPatternsInBlock :: NucleotideAndPositionBlock -> Patterns -> IO (V.Vector Match)
+findPatternsInBlock (NucleotideAndPositionBlock numberOfPeople block_size inputData positionData) (Patterns patternData) = do
     result <- alloca $ \n_ptr -> do
-        x <- findPatterns (fromIntegral minScore) (fromIntegral numberOfPeople) (fromIntegral block_size) inputData positionData patternData (n_ptr :: Ptr CInt)
+        x <- findPatterns (fromIntegral numberOfPeople) (fromIntegral block_size) inputData positionData patternData (n_ptr :: Ptr CInt)
         result_size <- peek n_ptr
         fptr <- newForeignPtr freePtr x
         --print ("result_size", result_size)

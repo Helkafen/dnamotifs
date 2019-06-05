@@ -2,3 +2,7 @@
 *.cabal
 .HTF
 chr*.bed
+.RData
+.Rhistory
+.bed
+.stack-work-profile/

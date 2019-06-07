@@ -12,6 +12,7 @@ import qualified Data.ByteString                 as B
 import           Foreign.C.Types                 (CInt)
 import           Data.Text.Encoding              (encodeUtf8)
 import qualified Data.Map
+import           Data.Char                       (ord)
 
 import Types
 import PatternFind
@@ -288,6 +289,32 @@ test_variantsToDiffs_2 = do
                                    ,((0,HaploRight), V.fromList [diff4])
                                    ,((1,HaploRight),V.fromList [diff3])] :: Data.Map.Map (Int, Haplotype) (V.Vector Diff)
   assertEqual expected diffs
+
+test_processPeak_1 :: IO()
+test_processPeak_1 = do
+  let chr = Chromosome "1"
+  let patterns = mkPatterns [Pattern 2000 pattern_CG, Pattern 900 pattern_cCGA]
+  let ref = takeRef (B.pack (map (fromIntegral . ord) "AAAACCCGGGTTT"))
+  --                                                       T            -- Sample 0, haplotype Left
+  --                                                              C     -- Sample 0, haplotype Right
+  --                                                                    -- Sample 1, haplotype Left
+  --                                                          A         -- Sample 1, haplotype Right
+
+
+
+  let samples = Data.Map.fromList [(0, SampleId "sample0"), (1, SampleId "sample1")]
+  let sampleIdentifiers = G.fromList [SampleId "sample0", SampleId "sample1"]
+  let (peakStart, peakEnd) = (3, 7)
+  let variant1 = Variant chr (Position 4)  (Just "1:4:C:T")  (mkSeq [c]) (mkSeq [t]) (G.fromList [0]) (G.fromList []) sampleIdentifiers
+  let variant2 = Variant chr (Position 7)  (Just "1:7:G:A")  (mkSeq [g]) (mkSeq [a]) (G.fromList []) (G.fromList [1]) sampleIdentifiers
+  let variant3 = Variant chr (Position 11) (Just "1:11:T:C") (mkSeq [t]) (mkSeq [c]) (G.fromList []) (G.fromList [0]) sampleIdentifiers
+  let variants = [variant1, variant2, variant3]
+  (nextVariants, numberOfHaplotypes, numberOfVariants, numberOfMatches) <- processPeak chr patterns ref samples (peakStart, peakEnd) variants
+  assertEqual nextVariants [variant3]
+  assertEqual numberOfHaplotypes 3
+  assertEqual numberOfVariants 2
+  assertEqual numberOfMatches 6
+
 
 main :: IO ()
 main = 

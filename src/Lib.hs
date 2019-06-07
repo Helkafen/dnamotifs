@@ -74,8 +74,8 @@ variantToDiffs v = V.map (\i -> (i, HaploLeft, d)) (STO.convert (genotypesL v)) 
     where d = Diff (position v) (reference v) (alternative v)
 
 
-findPatterns :: Chromosome -> Patterns -> Int -> FilePath -> FilePath -> FilePath -> FilePath -> IO Bool
-findPatterns chr patterns minScore peakFile referenceGenomeFile vcfFile resultFile = do
+findPatterns :: Chromosome -> Patterns -> FilePath -> FilePath -> FilePath -> FilePath -> IO Bool
+findPatterns chr patterns peakFile referenceGenomeFile vcfFile resultFile = do
     (takeReferenceGenome, referenceGenomeSize) <- loadFasta chr referenceGenomeFile
     TIO.putStrLn $ "Chromosome " <> unChr chr <> " : " <> T.pack (show referenceGenomeSize) <> " bases"
     --patterns <- loadPatterns ""
@@ -94,25 +94,24 @@ findPatterns chr patterns minScore peakFile referenceGenomeFile vcfFile resultFi
                     let samples = Data.Map.fromList (zip (V.toList sampleIndexes) (V.toList sampleIdList))
                     --let sampleIndexesTwoHaplotypes = sampleIndexes <> sampleIndexes
                     t0 <- getPOSIXTime
-                    processPeaks t0 chr minScore patterns takeReferenceGenome samples (zip [1..] peaks) variants
+                    processPeaks t0 chr patterns takeReferenceGenome samples (zip [1..] peaks) variants
                     return True
 
 processPeaks :: POSIXTime
              -> Chromosome
-             -> Int
              -> Patterns
              -> (Int -> Int -> BaseSequencePosition)
              -> Data.Map.Map Int SampleId
              -> [(Int, (Position0, Position0))]
              -> [Variant]
              -> IO ()
-processPeaks _ _ _ _ _ _ [] _ = pure ()
-processPeaks t0 chr minScore patterns takeReferenceGenome samples ((peakId, peak):xs) variants = do
+processPeaks _ _ _ _ _ [] _ = pure ()
+processPeaks t0 chr patterns takeReferenceGenome samples ((peakId, peak):xs) variants = do
     t1 <- getPOSIXTime
-    (nextVariants, numberOfHaplotypes, numberOfVariants, numberOfMatches) <- processPeak chr minScore patterns takeReferenceGenome samples peak variants
+    (nextVariants, numberOfHaplotypes, numberOfVariants, numberOfMatches) <- processPeak chr patterns takeReferenceGenome samples peak variants
     t2 <- getPOSIXTime
     putStrLn $ formatStatus t0 t1 t2 peakId (length xs + peakId) numberOfHaplotypes numberOfVariants numberOfMatches
-    processPeaks t0 chr minScore patterns takeReferenceGenome samples xs nextVariants
+    processPeaks t0 chr patterns takeReferenceGenome samples xs nextVariants
 
 formatStatus :: POSIXTime -> POSIXTime -> POSIXTime -> Int -> Int -> Int -> Int -> Int -> String
 formatStatus t0 t1 t2 peakId totalPeakNumber numberOfHaplotypes numberOfVariants numberOfMatches = 
@@ -126,14 +125,13 @@ formatStatus t0 t1 t2 peakId totalPeakNumber numberOfHaplotypes numberOfVariants
           matchesString = show numberOfMatches <> " matches"
 
 processPeak :: Chromosome
-            -> Int
             -> Patterns
             -> (Int -> Int -> BaseSequencePosition)
             -> Data.Map.Map Int SampleId
             -> (Position0, Position0)
             -> [Variant]
             -> IO ([Variant], Int, Int, Int)
-processPeak chr minScore patterns takeReferenceGenome samples (peakStart, peakEnd) variants = do
+processPeak chr patterns takeReferenceGenome samples (peakStart, peakEnd) variants = do
     let (variantsInPeak, nextVariants) = Data.List.span (\v -> position v <= peakEnd) $ dropWhile (\v -> position v < peakStart) variants
     let numberOfVariants = length variantsInPeak
     let diffs = variantsToDiffs variantsInPeak :: Data.Map.Map (Int, Haplotype) (V.Vector Diff)

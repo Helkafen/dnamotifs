@@ -46,11 +46,11 @@ data Pattern = Pattern {
   patternWeights :: [Pweight]
 } deriving (Eq, Show)
 
-data Match = Match {
+data Match a = Match {
     mPatternId :: !Int, -- 0 based
     mScore :: !Int,   -- 1000 times the float score
     mPosition :: !Int,  -- 0 based
-    mSampleId :: !Int,
+    mSampleId :: !a,
     mMatched :: ![Nucleotide]
 } deriving (Eq, Show)
 
@@ -106,7 +106,7 @@ type BaseSequence = B.ByteString
 
 -- Base sequence + reference position
 data BaseSequencePosition = BaseSequencePosition {-# UNPACK #-} !BaseSequence {-# UNPACK #-} !(STO.Vector CInt) -- TODO CInt16 for memory bandwidth
-    deriving (Eq, Show)
+    deriving (Eq, Ord, Show)
 
 newtype Chromosome = Chromosome { unChr :: Text }
   deriving (Eq, Show, Generic)

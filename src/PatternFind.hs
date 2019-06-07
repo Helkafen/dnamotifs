@@ -23,7 +23,7 @@ data NucleotideAndPositionBlock = NucleotideAndPositionBlock {-# UNPACK #-}!Int 
 blockInfo :: NucleotideAndPositionBlock -> String
 blockInfo (NucleotideAndPositionBlock numberOfHaplotypes blockSize _ positions) = "block " <> show numberOfHaplotypes <> " " <> show blockSize <> " " <> show (STO.minimum positions) <> " " <> show (STO.maximum positions)
 
-vectorToMatches :: STO.Vector CInt -> V.Vector Match
+vectorToMatches :: STO.Vector CInt -> V.Vector (Match Int)
 vectorToMatches v = V.fromList $ reverse $ mapMaybe toMatch (list4uple $ STO.toList v)
     where toMatch (p:s:pos:sam:matchedSequence) = Just $ Match (fromIntegral p) (fromIntegral s) (fromIntegral pos) (fromIntegral sam) (trimMatchedSequence $ map (Nucleotide . fromIntegral) matchedSequence)
           toMatch [] = Nothing
@@ -199,7 +199,7 @@ findPatterns sample_size block_size vec pos pat res_size = [C.block| int* {
     } |]
 
 
-findPatternsInBlock :: NucleotideAndPositionBlock -> Patterns -> IO (V.Vector Match)
+findPatternsInBlock :: NucleotideAndPositionBlock -> Patterns -> IO (V.Vector (Match Int))
 findPatternsInBlock (NucleotideAndPositionBlock numberOfPeople block_size inputData positionData) (Patterns patternData) = do
     result <- alloca $ \n_ptr -> do
         x <- findPatterns (fromIntegral numberOfPeople) (fromIntegral block_size) inputData positionData patternData (n_ptr :: Ptr CInt)

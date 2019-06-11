@@ -44,9 +44,8 @@ pattern_cccccccccc = [cPattern, cPattern, cPattern, cPattern, cPattern, cPattern
 
 test_patterns_basic :: IO ()
 test_patterns_basic = do
-    matches <- findPatternsInBlock (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns)
-    assertEqual expected matches
-  where inputData =  [BaseSequencePosition inputDataSample0 inputDataPositions]
+    assertEqual expected (findPatternsInBlock (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns))
+  where inputData = V.fromList [BaseSequencePosition inputDataSample0 inputDataPositions]
 
         inputDataPositions :: STO.Vector CInt
         inputDataPositions = STO.fromList $ map fromIntegral $ take (B.length inputDataSample0) [(0::CInt)..]
@@ -57,9 +56,8 @@ test_patterns_basic = do
 
 test_patterns_basic2 :: IO ()
 test_patterns_basic2 = do
-    matches <- findPatternsInBlock (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns)
-    assertEqual expected matches
-  where inputData =  [BaseSequencePosition inputDataSample0 inputDataPositions]
+    assertEqual expected (findPatternsInBlock (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns))
+  where inputData = V.fromList [BaseSequencePosition inputDataSample0 inputDataPositions]
         inputDataPositions = STO.fromList $ take (B.length inputDataSample0) [(0::CInt)..]
 
         patterns = [Pattern 2000 pattern_CG, Pattern 900 pattern_cCGA]
@@ -70,11 +68,10 @@ test_patterns_basic2 = do
 
 test_patterns_1 :: IO ()
 test_patterns_1 = do
-    matches <- findPatternsInBlock (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns)
-    assertEqual (V.fromList  expected) matches
+    assertEqual (V.fromList  expected) (findPatternsInBlock (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns))
   where numberOfPeople = 1000 :: Int
 
-        inputData =  [BaseSequencePosition inputDataSample0 inputDataPositions, BaseSequencePosition inputDataSample1 inputDataPositions] ++ replicate (numberOfPeople - 2) (BaseSequencePosition inputDataSample2 inputDataPositions)
+        inputData = V.fromList [BaseSequencePosition inputDataSample0 inputDataPositions, BaseSequencePosition inputDataSample1 inputDataPositions] <> V.replicate (numberOfPeople - 2) (BaseSequencePosition inputDataSample2 inputDataPositions)
 
         inputDataPositions = STO.fromList $ take (B.length inputDataSample0) [(0::CInt)..]
 
@@ -90,11 +87,10 @@ test_patterns_1 = do
 -- Check that the Matches contain the reference position, not the real position
 test_patterns_2 :: IO ()
 test_patterns_2 = do
-    matches <- findPatternsInBlock (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns)
-    assertEqual (V.fromList  expected) matches
+    assertEqual (V.fromList  expected) (findPatternsInBlock (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns))
   where numberOfPeople = 1000 :: Int
 
-        inputData =  [BaseSequencePosition inputDataSample0 inputDataPositions, BaseSequencePosition inputDataSample1 (STO.map (+7) inputDataPositions)] ++ replicate (numberOfPeople - 2) (BaseSequencePosition inputDataSample2 inputDataPositions)
+        inputData = V.fromList [BaseSequencePosition inputDataSample0 inputDataPositions, BaseSequencePosition inputDataSample1 (STO.map (+7) inputDataPositions)] <> V.replicate (numberOfPeople - 2) (BaseSequencePosition inputDataSample2 inputDataPositions)
 
         inputDataPositions = STO.fromList $ take (B.length inputDataSample0) [(10::CInt)..]
 
@@ -110,11 +106,10 @@ test_patterns_2 = do
 -- Check that the end of the chromosome is padded with N
 test_patterns_padding :: IO ()
 test_patterns_padding = do
-    matches <- findPatternsInBlock (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns)
-    assertEqual (V.fromList  expected) matches
+    assertEqual (V.fromList  expected) (findPatternsInBlock (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns))
   where numberOfPeople = 1000 :: Int
 
-        inputData =  [BaseSequencePosition (B.take 5 inputDataSample0) (STO.take 5 inputDataPositions), BaseSequencePosition inputDataSample1 inputDataPositions] ++ replicate (numberOfPeople - 2) (BaseSequencePosition (B.take 10 inputDataSample2) (STO.take 10 inputDataPositions))
+        inputData = V.fromList [BaseSequencePosition (B.take 5 inputDataSample0) (STO.take 5 inputDataPositions), BaseSequencePosition inputDataSample1 inputDataPositions] <> V.replicate (numberOfPeople - 2) (BaseSequencePosition (B.take 10 inputDataSample2) (STO.take 10 inputDataPositions))
         inputDataPositions = STO.fromList $ take (B.length inputDataSample0) [(10::CInt)..]
 
         patterns = [Pattern 1000 pattern_CG, Pattern 1000 pattern_cCGA, Pattern 1000 pattern_CG]

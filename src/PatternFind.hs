@@ -12,6 +12,7 @@ import qualified Data.Vector                     as V
 import qualified Data.ByteString                 as B
 import           Data.Monoid                     ((<>))
 import           Data.Maybe                      (mapMaybe)
+import           System.IO.Unsafe                (unsafePerformIO)
 
 import Types
 
@@ -48,11 +49,10 @@ padBS :: Nucleotide -> Int -> B.ByteString -> B.ByteString
 padBS (Nucleotide e) len v = B.append v (B.replicate (len - B.length v) e)
 
 -- Pad with nucleotide N if sizes are different
-mkNucleotideAndPositionBlock :: [BaseSequencePosition] -> NucleotideAndPositionBlock
-mkNucleotideAndPositionBlock [] = NucleotideAndPositionBlock 0 0 B.empty STO.empty
-mkNucleotideAndPositionBlock xs = NucleotideAndPositionBlock numberOfPeople max_length (B.concat $ map (padBS n max_length . seqOf) xs) (mconcat $ map (pad 0 max_length . posOf) xs)
-    where numberOfPeople = length xs
-          max_length = maximum (map (B.length . seqOf) xs)
+mkNucleotideAndPositionBlock :: V.Vector BaseSequencePosition -> NucleotideAndPositionBlock
+mkNucleotideAndPositionBlock xs = NucleotideAndPositionBlock numberOfPeople max_length (B.concat $ V.toList $ V.map (padBS n max_length . seqOf) xs) (mconcat $ V.toList $ V.map (pad 0 max_length . posOf) xs)
+    where numberOfPeople = V.length xs
+          max_length = maximum (V.map (B.length . seqOf) xs)
           seqOf (BaseSequencePosition nuc _) = nuc
           posOf (BaseSequencePosition _ pos) = pos
 
@@ -199,12 +199,11 @@ findPatterns sample_size block_size vec pos pat res_size = [C.block| int* {
     } |]
 
 
-findPatternsInBlock :: NucleotideAndPositionBlock -> Patterns -> IO (V.Vector (Match Int))
-findPatternsInBlock (NucleotideAndPositionBlock numberOfPeople block_size inputData positionData) (Patterns patternData) = do
+findPatternsInBlock :: NucleotideAndPositionBlock -> Patterns -> V.Vector (Match Int)
+findPatternsInBlock (NucleotideAndPositionBlock numberOfPeople block_size inputData positionData) (Patterns patternData) = unsafePerformIO $ do
     result <- alloca $ \n_ptr -> do
         x <- findPatterns (fromIntegral numberOfPeople) (fromIntegral block_size) inputData positionData patternData (n_ptr :: Ptr CInt)
         result_size <- peek n_ptr
         fptr <- newForeignPtr freePtr x
-        --print ("result_size", result_size)
         return $ STO.unsafeFromForeignPtr0 fptr (fromIntegral (34 * result_size))
     return $ vectorToMatches (result :: STO.Vector CInt)

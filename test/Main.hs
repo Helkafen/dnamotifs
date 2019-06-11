@@ -126,7 +126,7 @@ test_patterns_padding = do
                     Match{mPatternId = 2, mScore = 2000, mPosition = 10, mSampleId = 1, mMatched = [c, g]}]
 
 
-refGenome :: Int -> Int -> BaseSequencePosition
+refGenome :: Position0 -> Position0 -> BaseSequencePosition
 refGenome = takeRef (B.pack [65,67,71,84]) -- ACGT
 
 

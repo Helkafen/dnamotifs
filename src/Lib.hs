@@ -27,23 +27,24 @@ import PatternFind (findPatternsInBlock, mkPatterns, mkNucleotideAndPositionBloc
 
 
 -- Inclusive [Start, End] interval
-applyVariants :: (Int -> Int -> BaseSequencePosition) -> Position0 -> Position0 -> [Diff] -> BaseSequencePosition
-applyVariants takeReferenceGenome (Position start) (Position end) allDiffs =
-    let chunks = go start (filter (\(Diff (Position p) _ _) -> p >= start && p <= end) allDiffs)
+applyVariants :: (Position0 -> Position0 -> BaseSequencePosition) -> Position0 -> Position0 -> [Diff] -> BaseSequencePosition
+applyVariants takeReferenceGenome start end allDiffs =
+    let chunks = go start (filter (\(Diff p _ _) -> p >= start && p <= end) allDiffs)
     in BaseSequencePosition (B.concat (map seqOf chunks)) (STO.concat (map posOf chunks))
-  where go :: Int -> [Diff] -> [BaseSequencePosition]
+  where go :: Position0 -> [Diff] -> [BaseSequencePosition]
         go refPosition [] = [takeReferenceGenome refPosition end]
-        go refPosition diffs@(Diff (Position pos) ref alt:vs)
+        go refPosition diffs@(Diff pos ref alt:vs)
             | pos > refPosition = takeReferenceGenome refPosition (pos-1): go pos diffs
             | pos == refPosition && B.length ref == 1 = -- SNV, insertion
                 BaseSequencePosition alt (STO.replicate (B.length alt) (fromIntegral refPosition)): go (refPosition + 1) vs
             | pos == refPosition && B.length alt == 1 = -- deletion
-                BaseSequencePosition alt (STO.singleton (fromIntegral refPosition)) : go (refPosition + B.length ref) vs
+                BaseSequencePosition alt (STO.singleton (fromIntegral refPosition)) : go (offSet refPosition (B.length ref)) vs
             | pos == refPosition = error "Missing case in applyVariants (we assume that ref or alt have length 1)"
             | refPosition >= end = [takeReferenceGenome refPosition end]
             | otherwise = [BaseSequencePosition B.empty STO.empty]
         seqOf (BaseSequencePosition nuc _) = nuc
         posOf (BaseSequencePosition _ pos) = pos
+        offSet (Position x) o = Position (x + o)
 
 
 loadPatterns :: FilePath -> IO Patterns
@@ -100,7 +101,7 @@ findPatterns chr patterns peakFile referenceGenomeFile vcfFile resultFile = do
 processPeaks :: POSIXTime
              -> Chromosome
              -> Patterns
-             -> (Int -> Int -> BaseSequencePosition)
+             -> (Position0 -> Position0 -> BaseSequencePosition)
              -> Data.Map.Map Int SampleId
              -> [(Int, (Position0, Position0))]
              -> [Variant]
@@ -126,7 +127,7 @@ formatStatus t0 t1 t2 peakId totalPeakNumber numberOfHaplotypes numberOfVariants
 
 processPeak :: Chromosome
             -> Patterns
-            -> (Int -> Int -> BaseSequencePosition)
+            -> (Position0 -> Position0 -> BaseSequencePosition)
             -> Data.Map.Map Int SampleId
             -> (Position0, Position0)
             -> [Variant]

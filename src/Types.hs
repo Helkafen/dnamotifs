@@ -57,7 +57,7 @@ data Match a = Match {
 
 -- They need to keep theses values, because the C function uses them as memory offsets in a table
 newtype Nucleotide = Nucleotide { unNuc :: Word8 }
-  deriving (Eq, Show, Generic)
+  deriving (Eq, Generic)
 
 instance GStorable Nucleotide
 
@@ -75,6 +75,14 @@ a = Nucleotide 1
 c = Nucleotide 2
 g = Nucleotide 3
 t = Nucleotide 4
+
+instance Show Nucleotide where
+  show x | x == n = "N"
+         | x == a = "A"
+         | x == c = "C"
+         | x == g = "G"
+         | x == t = "T"
+         | otherwise = error "Wrong nucleotide code in show instance"
 
 -- ACGTacgtNn -> 01234
 {-# INLINE toNuc #-}

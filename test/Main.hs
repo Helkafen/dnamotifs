@@ -34,8 +34,10 @@ inputDataSample1 = mkSeq [c,g,a,a,a,a,a] <> B.replicate 93 (unNuc a)
 inputDataSample2 :: B.ByteString
 inputDataSample2 = mkSeq [a,a,a,a,a,a,a] <> B.replicate 93 (unNuc a)
 
-pattern_CG, pattern_cCGA, pattern_cccccccccc :: [Pweight]
+pattern_CG, pattern_cCGA, pattern_cccccccccc, pattern_AT, pattern_TC :: [Pweight]
 pattern_CG = [Pweight 0 1000 0 0, Pweight 0 0 1000 0]
+pattern_AT = [Pweight 1000 0 0 0, Pweight 0 0 0 1000]
+pattern_TC = [Pweight 0 0 0 1000, Pweight 0 1000 0 0]
 pattern_cCGA = [Pweight 0 100 0 0, Pweight 0 1000 0 0, Pweight 0 0 1000 0, Pweight 500 0 0 0]
 pattern_cccccccccc = [cPattern, cPattern, cPattern, cPattern, cPattern, cPattern, cPattern, cPattern, cPattern, cPattern]
   where cPattern = Pweight 0 0 1 0
@@ -293,7 +295,7 @@ test_variantsToDiffs_2 = do
 test_processPeak_1 :: IO()
 test_processPeak_1 = do
   let chr = Chromosome "1"
-  let patterns = mkPatterns [Pattern 2000 pattern_CG, Pattern 900 pattern_cCGA]
+  let patterns = mkPatterns [Pattern 2000 pattern_CG, Pattern 2000 pattern_AT, Pattern 2000 pattern_TC]
   let ref = takeRef (B.pack (map (fromIntegral . ord) "AAAACCCGGGTTT"))
   --                                                       T            -- Sample 0, haplotype Left
   --                                                              C     -- Sample 0, haplotype Right
@@ -311,9 +313,14 @@ test_processPeak_1 = do
   let variants = [variant1, variant2, variant3]
   (nextVariants, matches, numberOfHaplotypes, numberOfVariants, numberOfMatches) <- processPeak chr patterns ref samples (peakStart, peakEnd) variants
   assertEqual nextVariants [variant3]
-  assertEqual numberOfHaplotypes 3
-  assertEqual numberOfVariants 2
-  assertEqual numberOfMatches 6
+  assertEqual 3 numberOfHaplotypes
+  assertEqual 2 numberOfVariants
+  assertEqual 5 numberOfMatches
+  let expectedMatches = [Match 0 2000 6 [(SampleId "sample0",HaploRight),(SampleId "sample1",HaploLeft)] [c,g],
+                         Match 1 2000 3 [(SampleId "sample0",HaploLeft)]                                 [a,t],
+                         Match 2 2000 4 [(SampleId "sample0",HaploLeft)]                                 [t,c],
+                         Match 0 2000 6 [(SampleId "sample0",HaploLeft)]                                 [c,g]]
+  assertEqual (V.fromList expectedMatches) matches
 
 
 main :: IO ()

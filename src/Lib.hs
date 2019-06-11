@@ -136,68 +136,18 @@ processPeak chr patterns takeReferenceGenome samples (peakStart, peakEnd) varian
     
     let uniqueDiffs = Data.Map.fromListWith (<>) $ map (\(x,y) -> (y,[x])) $ Data.Map.toList $ variantsToDiffs variantsInPeak :: Data.Map.Map (V.Vector Diff) [(Int, Haplotype)]
     
-    let uniqueSequences = Data.Map.toList $ fmap (map (\(i,h) -> (toSampleId i,h))) $ Data.Map.mapKeysWith (<>) (applyVariants takeReferenceGenome peakStart peakEnd . V.toList) uniqueDiffs :: [(BaseSequencePosition, [(SampleId, Haplotype)])]
+    let x = Data.Map.toList $ Data.Map.mapKeysWith (<>) (applyVariants takeReferenceGenome peakStart peakEnd . V.toList) uniqueDiffs :: [(BaseSequencePosition, [(Int, Haplotype)])]
+    let uniqueSequences = map (\(s, ids) -> (s, map (\(i,h) -> (toSampleId i,h)) ids)) x :: [(BaseSequencePosition, [(SampleId, Haplotype)])]
 
-    matches <- findPatternsInBlock (mkNucleotideAndPositionBlock (map fst uniqueSequences)) patterns
-    let matchesWithSampleIds = V.map (\(Match patId score pos sampleId matched) -> Match patId score pos (map snd uniqueSequences !! sampleId) matched) matches :: V.Vector (Match [(Int, Haplotype)])
+    let samplesWithNoVariant = Set.difference (Set.fromList [(x,y) | x <- Data.Map.elems samples, y <- [HaploLeft, HaploRight]]) (Set.fromList $ concatMap snd uniqueSequences) :: Set.Set (SampleId, Haplotype)
 
-    
-    --matches2 <- findPatternsInBlock (mkNucleotideAndPositionBlock [applyVariants takeReferenceGenome peakStart peakEnd []]) patterns
+    let uniqueSequencesIncludingSamplesWithNoVariant = (applyVariants takeReferenceGenome peakStart peakEnd [], Set.toList samplesWithNoVariant) : uniqueSequences
 
-    
-    --V.map (\(Match patId score pos sampleId matched) -> Match patId score pos (map snd uniqueSequences) matched) matches1
+    matches <- findPatternsInBlock (mkNucleotideAndPositionBlock (map fst uniqueSequencesIncludingSamplesWithNoVariant)) patterns
+    let matchesWithSampleIds = V.map (\(Match patId score pos sampleId matched) -> Match patId score pos (map snd uniqueSequencesIncludingSamplesWithNoVariant !! sampleId) matched) matches :: V.Vector (Match [(SampleId, Haplotype)])
 
-    let matches = V.empty
-
-    return (nextVariants, matchesWithSampleIds, length uniqueSequences, length variantsInPeak, V.sum (V.map (length . mSampleId) matchesWithSampleIds))
-    where toSampleId = flip Data.Map.findWithDefault (error "Coding error: shoud have sampleId") samples
-    -- numberOfHaplotypes, (length variantsInPeak), V.length matches
-    
---    -- We don't want to generate and scan the same haplotypes n times in a large population, so
---    -- we put the unique haplotypes in an array, scan that array, then use the indices (mSampleId) 
---    -- of each Match to recover the [(SampleId, Haplotype)] of origin
---
---
---
---    -- Just some book keeping
---    
---
---    -- The actual scan
---    let noDiff = []
---    let block = mkNucleotideAndPositionBlock (map (applyVariants takeReferenceGenome peakStart peakEnd) ((V.toList <$> uniqueDiffs) ++ noDiff))
---    let numberOfHaplotypes = length uniqueDiffs + 1 -- 1 for the reference haplotype
---    matches <- findPatternsInBlock block patterns
---
---    -- Recover the [(SampleId, Haplotype)] of each match and print
---    forM_ (V.toList matches) $ \(Match patId score pos sampleId matched) -> do
---        let diffsOfMatch = uniqueDiffs !! sampleId :: V.Vector Diff
---        let haploIdsOfMatch = Data.Map.findWithDefault haplotypesSampleIdWithNoVariant diffsOfMatch m :: [(SampleId, Haplotype)]
---        let matches1 = map (\(i,h) -> Match patId score pos (Data.Map.findWithDefault (error "Coding error: shoud have sampleId") i samples,h) matched) haploIdsOfMatch :: [Match (SampleId, Haplotype)]
---
---        --let strings = map (formatMatch chr peakStart peakEnd samples match) haploIdsOfMatch :: [T.Text]
---        --forM_ (take 2 strings) $ TIO.putStrLn
---        --if (length strings == -1)
---        --    then print strings
---        --    else pure()
---        --appendFile resultFile (Data.List.concat strings)
---        --putStrLn ("No append" :: String)
---        pure ()
---    
---    pure (nextVariants, V.empty, numberOfHaplotypes, (length variantsInPeak), V.length matches)
---  where 
---        diffs = variantsToDiffs variantsInPeak :: Data.Map.Map (Int, Haplotype) (V.Vector Diff)
---        uniqueDiffs = Set.toList $ Set.fromList (Data.Map.elems diffs) :: [(V.Vector Diff)]
---        sampleIndexes = V.iterateN (Data.Map.size samples) (+1) 0 :: V.Vector Int
---        
---        haplotypeIds = V.map (,HaploLeft) sampleIndexes <> V.map (,HaploRight) sampleIndexes :: V.Vector (Int, Haplotype)
---        haplotypeSampleIds = V.map (\(i,h) -> (Data.Map.findWithDefault (error "Coding error: shoud have sampleId") i samples,h)) haplotypeIds :: V.Vector (SampleId, Haplotype)
---        
---        haplotypesWithNoVariant = Set.toList $ Set.difference (Set.fromList $ V.toList haplotypeIds) (Data.Map.keysSet diffs) :: [(Int, Haplotype)]
---        haplotypesSampleIdWithNoVariant = map (\(i,h) -> Data.Map.findWithDefault (error "Coding error: shoud have sampleId") i samples,h) haplotypesWithNoVariant
---        
---        m = Data.Map.fromListWith (<>) (map (\(x,y) -> (y,[x])) $ Data.Map.toList diffs) :: Data.Map.Map (V.Vector Diff) [(Int, Haplotype)]
---
---        hydrate (Match patId score pos sampleId matched) = map (\(i,h) -> Match patId score pos (Data.Map.findWithDefault (error "Coding error: shoud have sampleId") i samples,h) matched) haploIdsOfMatch
+    return (nextVariants, matchesWithSampleIds, length uniqueSequencesIncludingSamplesWithNoVariant, length variantsInPeak, V.sum (V.map (length . mSampleId) matchesWithSampleIds))
+    where toSampleId a = Data.Map.findWithDefault (error "Coding error: shoud have sampleId") a samples :: SampleId
 
 
 formatMatch :: Chromosome -> Position0 -> Position0 -> Data.Map.Map Int SampleId -> Match Int -> (Int, Haplotype) -> T.Text

@@ -115,7 +115,10 @@ type BaseSequence = B.ByteString
 
 -- Base sequence + reference position
 data BaseSequencePosition = BaseSequencePosition {-# UNPACK #-} !BaseSequence {-# UNPACK #-} !(STO.Vector CInt) -- TODO CInt16 for memory bandwidth
-    deriving (Eq, Ord, Show)
+    deriving (Eq, Ord)
+
+instance Show BaseSequencePosition where
+  show (BaseSequencePosition nuc pos) = show (B.unpack nuc, STO.toList pos)
 
 newtype Chromosome = Chromosome { unChr :: Text }
   deriving (Eq, Show, Generic)

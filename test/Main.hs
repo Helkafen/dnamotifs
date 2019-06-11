@@ -306,13 +306,13 @@ test_processPeak_1 = do
   let variants = [variant1, variant2, variant3]
   (nextVariants, matches, numberOfHaplotypes, numberOfVariants, numberOfMatches) <- processPeak chr patterns ref samples (peakStart, peakEnd) variants
   assertEqual nextVariants [variant3]
-  assertEqual 3 numberOfHaplotypes
+  assertEqual 3 numberOfHaplotypes -- Including the reference genome. Only on interval [3->7]
   assertEqual 2 numberOfVariants
   assertEqual 5 numberOfMatches
-  let expectedMatches = [Match 0 2000 6 [HaplotypeId (SampleId "sample0") HaploRight,HaplotypeId (SampleId "sample1") HaploLeft] [c,g],
-                         Match 1 2000 3 [HaplotypeId (SampleId "sample0") HaploLeft]                                             [a,t],
-                         Match 2 2000 4 [HaplotypeId (SampleId "sample0") HaploLeft]                                             [t,c],
-                         Match 0 2000 6 [HaplotypeId (SampleId "sample0") HaploLeft]                                             [c,g]]
+  let expectedMatches = [Match 0 2000 6 [HaplotypeId (SampleId "sample0") HaploRight, HaplotypeId (SampleId "sample1") HaploLeft] [c,g],
+                         Match 1 2000 3 [HaplotypeId (SampleId "sample0") HaploLeft]                                              [a,t],
+                         Match 2 2000 4 [HaplotypeId (SampleId "sample0") HaploLeft]                                              [t,c],
+                         Match 0 2000 6 [HaplotypeId (SampleId "sample0") HaploLeft]                                              [c,g]]
   assertEqual (V.fromList expectedMatches) matches
 
 

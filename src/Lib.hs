@@ -139,15 +139,18 @@ processPeak :: Chromosome
 processPeak chr patterns takeReferenceGenome samples (peakStart, peakEnd) variants = do
     let (variantsInPeak, nextVariants) = Data.List.span (\v -> position v <= peakEnd) $ dropWhile (\v -> position v < peakStart) variants
 
-    let uniqueSequences = M.toList $ M.mapKeysWith (<>) (applyVariants takeReferenceGenome peakStart peakEnd . V.toList) (variantsToDiffs variantsInPeak) :: [(BaseSequencePosition, [HaplotypeId])]
-    let samplesWithNoVariant = Set.difference allHaplotypeIds (Set.fromList $ concatMap snd uniqueSequences) :: Set.Set HaplotypeId
-    let uniqueSequencesIncludingSamplesWithNoVariant = V.fromList $ (takeReferenceGenome peakStart peakEnd, Set.toList samplesWithNoVariant) : uniqueSequences
-    let matches = findPatternsInBlock (mkNucleotideAndPositionBlock (V.map fst uniqueSequencesIncludingSamplesWithNoVariant)) patterns
-    let matchesWithSampleIds = V.map (\(Match patId score pos sampleId matched) -> Match patId score pos (snd $ uniqueSequencesIncludingSamplesWithNoVariant V.! sampleId) matched) matches :: V.Vector (Match [HaplotypeId])
+    let haplotypes = buildAllHaplotypes takeReferenceGenome (peakStart, peakEnd) (M.elems samples) variantsInPeak
+    let matches = findPatternsInBlock (mkNucleotideAndPositionBlock (V.map fst haplotypes)) patterns
+    let matchesWithSampleIds = V.map (\(Match patId score pos sampleId matched) -> Match patId score pos (snd $ haplotypes V.! sampleId) matched) matches :: V.Vector (Match [HaplotypeId])
 
-    return (nextVariants, matchesWithSampleIds, length uniqueSequencesIncludingSamplesWithNoVariant, length variantsInPeak, V.sum (V.map (length . mSampleId) matchesWithSampleIds))
+    return (nextVariants, matchesWithSampleIds, length haplotypes, length variantsInPeak, V.sum (V.map (length . mSampleId) matchesWithSampleIds))
 
-  where allHaplotypeIds = Set.fromList [HaplotypeId x y | x <- M.elems samples, y <- [HaploLeft, HaploRight]]
+
+buildAllHaplotypes :: (Position0 -> Position0 -> BaseSequencePosition) -> (Position0, Position0) -> [SampleId] -> [Variant] -> V.Vector (BaseSequencePosition, [HaplotypeId])
+buildAllHaplotypes takeReferenceGenome (peakStart, peakEnd) sampleIds variants = V.fromList $ (takeReferenceGenome peakStart peakEnd, Set.toList samplesWithNoVariant) : haplotypes
+    where haplotypes = M.toList $ M.mapKeysWith (<>) (applyVariants takeReferenceGenome peakStart peakEnd . V.toList) (variantsToDiffs variants) :: [(BaseSequencePosition, [HaplotypeId])]
+          samplesWithNoVariant = Set.difference allHaplotypeIds (Set.fromList $ concatMap snd haplotypes) :: Set.Set HaplotypeId
+          allHaplotypeIds = Set.fromList [HaplotypeId x y | x <- sampleIds, y <- [HaploLeft, HaploRight]]
 
 
 formatMatch :: Chromosome -> Position0 -> Position0 -> M.Map Int SampleId -> Match Int -> (Int, Haplotype) -> T.Text

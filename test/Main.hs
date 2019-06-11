@@ -316,10 +316,10 @@ test_processPeak_1 = do
   assertEqual 3 numberOfHaplotypes
   assertEqual 2 numberOfVariants
   assertEqual 5 numberOfMatches
-  let expectedMatches = [Match 0 2000 6 [(SampleId "sample0",HaploRight),(SampleId "sample1",HaploLeft)] [c,g],
-                         Match 1 2000 3 [(SampleId "sample0",HaploLeft)]                                 [a,t],
-                         Match 2 2000 4 [(SampleId "sample0",HaploLeft)]                                 [t,c],
-                         Match 0 2000 6 [(SampleId "sample0",HaploLeft)]                                 [c,g]]
+  let expectedMatches = [Match 0 2000 6 [HaplotypeId (SampleId "sample0") HaploRight,HaplotypeId (SampleId "sample1") HaploLeft] [c,g],
+                         Match 1 2000 3 [HaplotypeId (SampleId "sample0") HaploLeft]                                             [a,t],
+                         Match 2 2000 4 [HaplotypeId (SampleId "sample0") HaploLeft]                                             [t,c],
+                         Match 0 2000 6 [HaplotypeId (SampleId "sample0") HaploLeft]                                             [c,g]]
   assertEqual (V.fromList expectedMatches) matches
 
 

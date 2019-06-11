@@ -15,6 +15,7 @@ module Types (
   Variant(..),
   Diff(..),
   Error(..),
+  HaplotypeId(..),
 ) where
 
 import           Data.Text (Text)
@@ -175,3 +176,6 @@ data Error = ParsingError Text | MissingFile FilePath | NoVariantFound FilePath
   deriving (Eq, Show, Generic)
 
 instance NFData Error
+
+data HaplotypeId = HaplotypeId !SampleId !Haplotype
+  deriving (Eq, Ord, Show)

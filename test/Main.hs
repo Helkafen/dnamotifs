@@ -266,14 +266,13 @@ test_motif_parser_1 = do
                                           ,Pweight{wa = 1986, wc = 2979, wg = 0, wt = 26036}])
   assertEqual (Right [expected]) parsed
 
-
+--  variantsToDiffs :: [Variant] -> M.Map (V.Vector Diff) [HaplotypeId]
 test_variantsToDiffs_1 :: IO ()
 test_variantsToDiffs_1 = do
   let sampleIdentifiers = G.fromList [SampleId "sample1", SampleId "sample2"]
   let var = Variant (Chromosome "1") (Position 69080) (Just "1:69081:G:C") (mkSeq [c]) (mkSeq [g]) (G.fromList [0]) (G.fromList [1]) sampleIdentifiers
   let diffs = variantsToDiffs [var]
-  let expected = Data.Map.fromList [((0,HaploLeft), V.fromList [Diff (Position 69080) (mkSeq [c]) (mkSeq [g])])
-                                   ,((1,HaploRight),V.fromList [Diff (Position 69080) (mkSeq [c]) (mkSeq [g])])] :: Data.Map.Map (Int, Haplotype) (V.Vector Diff)
+  let expected = Data.Map.fromList [(V.singleton (Diff (Position 69080) (mkSeq [c]) (mkSeq [g])),  [HaplotypeId (SampleId "sample2") HaploRight, HaplotypeId (SampleId "sample1") HaploLeft])]
   assertEqual expected diffs
 
 test_variantsToDiffs_2 :: IO ()
@@ -285,11 +284,10 @@ test_variantsToDiffs_2 = do
   let diffs = variantsToDiffs [variant1, variant2, variant3]
   let diff1 = Diff (Position 69080) (mkSeq [c]) (mkSeq [g])
   let diff2 = Diff (Position 69079) (mkSeq [a]) (mkSeq [t])
-  let diff3 = Diff (Position 69080) (mkSeq [c]) (mkSeq [g])
   let diff4 = Diff (Position 69078) (mkSeq [t]) (mkSeq [g])
-  let expected = Data.Map.fromList [((0,HaploLeft), V.fromList [diff2, diff1]) -- Order of positions must be increasing
-                                   ,((0,HaploRight), V.fromList [diff4])
-                                   ,((1,HaploRight),V.fromList [diff3])] :: Data.Map.Map (Int, Haplotype) (V.Vector Diff)
+  let expected = Data.Map.fromList [(V.fromList [diff4],       [HaplotypeId (SampleId "sample1") HaploRight])
+                                   ,(V.fromList [diff2,diff1], [HaplotypeId (SampleId "sample1") HaploLeft])
+                                   ,(V.fromList [diff1],       [HaplotypeId (SampleId "sample2") HaploRight])]
   assertEqual expected diffs
 
 test_processPeak_1 :: IO()

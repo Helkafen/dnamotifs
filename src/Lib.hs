@@ -4,7 +4,7 @@
 
 module Lib where
 
-import qualified Data.Map
+import qualified Data.Map as M
 import qualified Data.List
 import qualified Data.Set as Set
 import qualified Data.Vector as V
@@ -65,8 +65,8 @@ hasVariantRight x | x == geno00 = False
                   | otherwise = error "Bad geno"
 
 
-variantsToDiffs :: [Variant] -> Data.Map.Map (Int, Haplotype) (V.Vector Diff)
-variantsToDiffs variants = V.modify sort <$> Data.Map.fromListWith (<>) (V.toList $ V.map (\(i, h, d) -> ((i,h), V.singleton d)) allDiffs)
+variantsToDiffs :: [Variant] -> M.Map (Int, Haplotype) (V.Vector Diff)
+variantsToDiffs variants = V.modify sort <$> M.fromListWith (<>) (V.toList $ V.map (\(i, h, d) -> ((i,h), V.singleton d)) allDiffs)
     where allDiffs = V.concatMap variantToDiffs (V.fromList variants) :: V.Vector (Int, Haplotype, Diff)
 
 
@@ -92,7 +92,7 @@ findPatterns chr patterns peakFile referenceGenomeFile vcfFile resultFile = do
                     let sampleIdList = sampleIds x
                     putStrLn $ "Population: " <> show (V.length sampleIdList)
                     let sampleIndexes = V.iterateN (V.length sampleIdList) (+1) 0 :: V.Vector Int
-                    let samples = Data.Map.fromList (zip (V.toList sampleIndexes) (V.toList sampleIdList))
+                    let samples = M.fromList (zip (V.toList sampleIndexes) (V.toList sampleIdList))
                     --let sampleIndexesTwoHaplotypes = sampleIndexes <> sampleIndexes
                     t0 <- getPOSIXTime
                     processPeaks t0 chr patterns takeReferenceGenome samples (zip [1..] peaks) variants
@@ -102,7 +102,7 @@ processPeaks :: POSIXTime
              -> Chromosome
              -> Patterns
              -> (Position0 -> Position0 -> BaseSequencePosition)
-             -> Data.Map.Map Int SampleId
+             -> M.Map Int SampleId
              -> [(Int, (Position0, Position0))]
              -> [Variant]
              -> IO ()
@@ -128,19 +128,19 @@ formatStatus t0 t1 t2 peakId totalPeakNumber numberOfHaplotypes numberOfVariants
 processPeak :: Chromosome
             -> Patterns
             -> (Position0 -> Position0 -> BaseSequencePosition)
-            -> Data.Map.Map Int SampleId
+            -> M.Map Int SampleId
             -> (Position0, Position0)
             -> [Variant]
             -> IO ([Variant], V.Vector (Match [(SampleId, Haplotype)]), Int, Int, Int)
 processPeak chr patterns takeReferenceGenome samples (peakStart, peakEnd) variants = do
     let (variantsInPeak, nextVariants) = Data.List.span (\v -> position v <= peakEnd) $ dropWhile (\v -> position v < peakStart) variants
     
-    let uniqueDiffs = Data.Map.fromListWith (<>) $ map (\(x,y) -> (y,[x])) $ Data.Map.toList $ variantsToDiffs variantsInPeak :: Data.Map.Map (V.Vector Diff) [(Int, Haplotype)]
+    let uniqueDiffs = M.fromListWith (<>) $ map (\(x,y) -> (y,[x])) $ M.toList $ variantsToDiffs variantsInPeak :: M.Map (V.Vector Diff) [(Int, Haplotype)]
     
-    let x = Data.Map.toList $ Data.Map.mapKeysWith (<>) (applyVariants takeReferenceGenome peakStart peakEnd . V.toList) uniqueDiffs :: [(BaseSequencePosition, [(Int, Haplotype)])]
+    let x = M.toList $ M.mapKeysWith (<>) (applyVariants takeReferenceGenome peakStart peakEnd . V.toList) uniqueDiffs :: [(BaseSequencePosition, [(Int, Haplotype)])]
     let uniqueSequences = map (\(s, ids) -> (s, map (\(i,h) -> (toSampleId i,h)) ids)) x :: [(BaseSequencePosition, [(SampleId, Haplotype)])]
 
-    let samplesWithNoVariant = Set.difference (Set.fromList [(x,y) | x <- Data.Map.elems samples, y <- [HaploLeft, HaploRight]]) (Set.fromList $ concatMap snd uniqueSequences) :: Set.Set (SampleId, Haplotype)
+    let samplesWithNoVariant = Set.difference (Set.fromList [(x,y) | x <- M.elems samples, y <- [HaploLeft, HaploRight]]) (Set.fromList $ concatMap snd uniqueSequences) :: Set.Set (SampleId, Haplotype)
 
     let uniqueSequencesIncludingSamplesWithNoVariant = (applyVariants takeReferenceGenome peakStart peakEnd [], Set.toList samplesWithNoVariant) : uniqueSequences
 
@@ -148,16 +148,16 @@ processPeak chr patterns takeReferenceGenome samples (peakStart, peakEnd) varian
     let matchesWithSampleIds = V.map (\(Match patId score pos sampleId matched) -> Match patId score pos (map snd uniqueSequencesIncludingSamplesWithNoVariant !! sampleId) matched) matches :: V.Vector (Match [(SampleId, Haplotype)])
 
     return (nextVariants, matchesWithSampleIds, length uniqueSequencesIncludingSamplesWithNoVariant, length variantsInPeak, V.sum (V.map (length . mSampleId) matchesWithSampleIds))
-    where toSampleId a = Data.Map.findWithDefault (error "Coding error: shoud have sampleId") a samples :: SampleId
+    where toSampleId a = M.findWithDefault (error "Coding error: shoud have sampleId") a samples :: SampleId
 
 
-formatMatch :: Chromosome -> Position0 -> Position0 -> Data.Map.Map Int SampleId -> Match Int -> (Int, Haplotype) -> T.Text
+formatMatch :: Chromosome -> Position0 -> Position0 -> M.Map Int SampleId -> Match Int -> (Int, Haplotype) -> T.Text
 formatMatch (Chromosome chr) (Position peakStart) (Position peakStop) samples (Match patId score pos _ matched) (i, haplo) =
     T.intercalate "\t" [chr
                        ,showt pos
                        ,showt peakStart <> "-" <> showt peakStop
                        ,showt patId
-                       ,showt $ Data.Map.findWithDefault (error "Coding error: shoud have sampleId") i samples
+                       ,showt $ M.findWithDefault (error "Coding error: shoud have sampleId") i samples
                        ,if haplo == HaploLeft then "Left" else "Right"
                        ,showt score
                        ,showt matched

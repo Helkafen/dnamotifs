@@ -37,7 +37,7 @@ weightsParser = do
     cWeight <- realToFrac <$> (double <* char '\t')
     gWeight <- realToFrac <$> (double <* char '\t')
     tWeight <- realToFrac <$> double
-    pure (Pweight (round $ 1000 * aWeight) (round $ 1000 * cWeight) (round $ 1000 * gWeight) (round $ 1000 * tWeight))
+    pure (Pweight (round $ 1000 * (aWeight :: Double)) (round $ 1000 * (cWeight  :: Double)) (round $ 1000 * (gWeight :: Double)) (round $ 1000 * (tWeight :: Double)))
 
 
 -- >ATGACTCATC     AP-1(bZIP)/ThioMac-PU.1-ChIP-Seq(GSE21512)/Homer        6.049537        -1.782996e+03   0       9805.3,5781.0,3085.1,2715.0,-- 0.00e+00

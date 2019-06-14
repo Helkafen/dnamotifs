@@ -304,7 +304,7 @@ test_processPeak_1 = do
   let variant2 = Variant chr (Position 7)  (Just "1:7:G:A")  (mkSeq [g]) (mkSeq [a]) (G.fromList []) (G.fromList [1]) sampleIdentifiers
   let variant3 = Variant chr (Position 11) (Just "1:11:T:C") (mkSeq [t]) (mkSeq [c]) (G.fromList []) (G.fromList [0]) sampleIdentifiers
   let variants = [variant1, variant2, variant3]
-  (nextVariants, matches, numberOfHaplotypes, numberOfVariants, numberOfMatches) <- processPeak chr patterns ref samples (peakStart, peakEnd) variants
+  let (nextVariants, matches, numberOfHaplotypes, numberOfVariants, numberOfMatches) = processPeak patterns ref samples (peakStart, peakEnd) variants
   assertEqual nextVariants [variant3]
   assertEqual 3 numberOfHaplotypes -- Including the reference genome. Only on interval [3->7]
   assertEqual 2 numberOfVariants

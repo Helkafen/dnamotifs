@@ -13,9 +13,20 @@ import qualified Data.Vector.Storable as STO
 import qualified Data.ByteString as B
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
+import qualified Data.Text.Encoding as TE
 --import           System.IO (appendFile)
 import           TextShow (showt)
 import           Data.Time.Clock.POSIX (getPOSIXTime, POSIXTime)
+
+--import qualified Data.ByteString.Lazy as BL
+--import qualified Codec.Compression.GZip as GZip
+
+import           Pipes (Producer, liftIO, yield, (>->), runEffect)
+import           Pipes.GZip (compress, defaultCompression)
+import qualified Pipes.ByteString as PBS
+import           System.IO (withFile, IOMode(..))
+
+
 
 
 import Types
@@ -99,7 +110,8 @@ findPatterns chr patterns peakFile referenceGenomeFile vcfFile resultFile = do
                     let sampleIndexes = V.iterateN (V.length sampleIdList) (+1) 0 :: V.Vector Int
                     let samples = M.fromList (zip (V.toList sampleIndexes) (V.toList sampleIdList))
                     t0 <- getPOSIXTime
-                    processPeaks t0 chr patterns takeReferenceGenome samples (zip [1..] peaks) variants
+                    withFile resultFile WriteMode $ \fh ->
+                        runEffect $ compress defaultCompression (processPeaks t0 chr patterns takeReferenceGenome samples (zip [1..] peaks) variants) >-> PBS.toHandle fh
                     return True
 
 processPeaks :: POSIXTime
@@ -109,13 +121,17 @@ processPeaks :: POSIXTime
              -> M.Map Int SampleId
              -> [(Int, (Position0, Position0))]
              -> [Variant]
-             -> IO ()
-processPeaks _ _ _ _ _ [] _ = pure ()
+             -> Producer B.ByteString IO ()
+processPeaks _ _ _ _ _ [] _ = yield B.empty
 processPeaks t0 chr patterns takeReferenceGenome samples ((peakId, peak):xs) variants = do
-    t1 <- getPOSIXTime
-    (nextVariants, matches, numberOfHaplotypes, numberOfVariants, numberOfMatches) <- processPeak chr patterns takeReferenceGenome samples peak variants
-    t2 <- getPOSIXTime
-    putStrLn $ formatStatus t0 t1 t2 peakId (length xs + peakId) numberOfHaplotypes numberOfVariants numberOfMatches
+    t1 <- liftIO getPOSIXTime
+    let (nextVariants, matches, numberOfHaplotypes, numberOfVariants, numberOfMatches) = processPeak patterns takeReferenceGenome samples peak variants
+    --case variants of
+    --    v:_ -> print (sampleIds v)
+    --    _   -> print "no var"
+    t2 <- liftIO getPOSIXTime
+    liftIO $ putStrLn $ formatStatus t0 t1 t2 peakId (length xs + peakId) numberOfHaplotypes numberOfVariants numberOfMatches
+    yield (reportAsByteString chr (countsInPeak peakId matches))
     processPeaks t0 chr patterns takeReferenceGenome samples xs nextVariants
 
 formatStatus :: POSIXTime -> POSIXTime -> POSIXTime -> Int -> Int -> Int -> Int -> Int -> String
@@ -129,38 +145,47 @@ formatStatus t0 t1 t2 peakId totalPeakNumber numberOfHaplotypes numberOfVariants
           variantsString = show numberOfVariants <> " variants"
           matchesString = show numberOfMatches <> " matches"
 
-processPeak :: Chromosome
-            -> Patterns
+processPeak :: Patterns
             -> (Position0 -> Position0 -> BaseSequencePosition)
             -> M.Map Int SampleId
             -> (Position0, Position0)
             -> [Variant]
-            -> IO ([Variant], V.Vector (Match [HaplotypeId]), Int, Int, Int)
-processPeak chr patterns takeReferenceGenome samples (peakStart, peakEnd) variants = do
+            -> ([Variant], V.Vector (Match [HaplotypeId]), Int, Int, Int)
+processPeak patterns takeReferenceGenome samples (peakStart, peakEnd) variants = do
     let (variantsInPeak, nextVariants) = Data.List.span (\v -> position v <= peakEnd) $ dropWhile (\v -> position v < peakStart) variants
 
     let haplotypes = buildAllHaplotypes takeReferenceGenome (peakStart, peakEnd) (M.elems samples) variantsInPeak
-    let matches = findPatternsInBlock (mkNucleotideAndPositionBlock (V.map fst haplotypes)) patterns
+    let matches = findPatternsInBlock (mkNucleotideAndPositionBlock (V.map fst haplotypes)) patterns                                                      :: V.Vector (Match Int)
     let matchesWithSampleIds = V.map (\(Match patId score pos sampleId matched) -> Match patId score pos (snd $ haplotypes V.! sampleId) matched) matches :: V.Vector (Match [HaplotypeId])
 
-    return (nextVariants, matchesWithSampleIds, length haplotypes, length variantsInPeak, V.sum (V.map (length . mSampleId) matchesWithSampleIds))
+    (nextVariants, matchesWithSampleIds, length haplotypes, length variantsInPeak, V.sum (V.map (length . mSampleId) matchesWithSampleIds))
 
 
 buildAllHaplotypes :: (Position0 -> Position0 -> BaseSequencePosition) -> (Position0, Position0) -> [SampleId] -> [Variant] -> V.Vector (BaseSequencePosition, [HaplotypeId])
-buildAllHaplotypes takeReferenceGenome (peakStart, peakEnd) sampleIds variants = V.fromList $ (takeReferenceGenome peakStart peakEnd, Set.toList samplesWithNoVariant) : haplotypes
+buildAllHaplotypes takeReferenceGenome (peakStart, peakEnd) sampleIdList variants = V.fromList $ (takeReferenceGenome peakStart peakEnd, Set.toList samplesWithNoVariant) : haplotypes
     where haplotypes = M.toList $ M.mapKeysWith (<>) (applyVariants takeReferenceGenome peakStart peakEnd . V.toList) (variantsToDiffs variants) :: [(BaseSequencePosition, [HaplotypeId])]
           samplesWithNoVariant = Set.difference allHaplotypeIds (Set.fromList $ concatMap snd haplotypes) :: Set.Set HaplotypeId
-          allHaplotypeIds = Set.fromList [HaplotypeId x y | x <- sampleIds, y <- [HaploLeft, HaploRight]]
+          allHaplotypeIds = Set.fromList [HaplotypeId x y | x <- sampleIdList, y <- [HaploLeft, HaploRight]]
 
 
-formatMatch :: Chromosome -> Position0 -> Position0 -> M.Map Int SampleId -> Match Int -> (Int, Haplotype) -> T.Text
-formatMatch (Chromosome chr) (Position peakStart) (Position peakStop) samples (Match patId score pos _ matched) (i, haplo) =
-    T.intercalate "\t" [chr
-                       ,showt pos
-                       ,showt peakStart <> "-" <> showt peakStop
-                       ,showt patId
-                       ,showt $ M.findWithDefault (error "Coding error: shoud have sampleId") i samples
-                       ,if haplo == HaploLeft then "Left" else "Right"
-                       ,showt score
-                       ,showt matched
-                       ,"\n"]
+countsInPeak :: Int -> V.Vector (Match [HaplotypeId]) -> M.Map (Int, Int, SampleId) Count2
+countsInPeak peakId matches = M.unionsWith (<>) (map (countM peakId) (V.toList matches))
+
+countM :: Int -> Match [HaplotypeId] -> M.Map (Int, Int, SampleId) Count2
+countM peakId (Match patternId _ _ haplotypeIds _) = fmap (\s -> (Count2 (count HaploLeft s) (count HaploRight s))) x
+    where x = M.fromListWith (<>) $ map (\(HaplotypeId sampleId haplo) -> ((peakId, patternId, sampleId), [haplo])) haplotypeIds :: M.Map (Int, Int, SampleId) [Haplotype]
+
+count :: Eq a => a -> [a] -> Int
+count x xs = (length . filter (== x)) xs
+
+data Count2 = Count2 Int Int
+    deriving (Show)
+
+instance Semigroup Count2 where
+    (Count2 x y) <> (Count2 z v) = Count2 (x+z) (y+v)
+
+reportAsByteString :: Chromosome -> M.Map (Int, Int, SampleId) Count2 -> B.ByteString
+reportAsByteString (Chromosome chr) d = TE.encodeUtf8 $ T.concat $ map formatLine (M.toList d)
+    where formatLine ((peakId, patternId, sampleId), Count2 c1 c2) = T.intercalate "\t" [showt chr, showt peakId, showt patternId, showt sampleId, showt c1 <> "/" <> showt c2 <> "\n"]
+    
+    

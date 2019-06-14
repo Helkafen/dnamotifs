@@ -30,6 +30,9 @@ dependencies:
 - text-show
 - vector-algorithms
 - deepseq
+- pipes
+- pipes-zlib
+- pipes-bytestring
 
 ghc-options:
   - -Wall

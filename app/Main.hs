@@ -126,7 +126,7 @@ main = do
 
         patterns <- loadHocomocoPatternsAndScoreThresholds "HOCOMOCOv11_core_pwms_HUMAN_mono.txt" "hocomoco_thresholds.tab" ["GATA1_HUMAN.H11MO.0.A"]
 
-        _ <- findPatterns (Chromosome "1") patterns "chr1.bed" "hg38.fa" "chr1.vcf.gz" "resultFile.tab"
+        _ <- findPatterns (Chromosome "1") patterns "chr1.bed" "hg38.fa" "chr1.vcf.gz" "resultFile.tab.gz"
         pure ()
       [chrom, referenceGenomeFastaFile, peakBedFile, vcfFile, motifsFile, score_thresholdsFile, outputFile] -> do
         let wantedHocomocoPatterns = mapMaybe tfHocomocoId knownPatterns :: [T.Text]

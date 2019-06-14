@@ -3,3 +3,4 @@ extra-deps:
         - bytestring-to-vector-0.3.0.1
         - derive-storable-0.1.2.0
         - derive-storable-plugin-0.2.2.0
+        - pipes-zlib-0.4.4.2

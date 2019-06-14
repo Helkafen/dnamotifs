@@ -109,7 +109,7 @@ readVcfWithGenotypes path regions = do
     (parseVcfContent regions . dropWhile ("##" `B.isPrefixOf`)) <$> readGzippedLines path
 
 sampleIdsInHeader :: B.ByteString -> V.Vector SampleId
-sampleIdsInHeader header = V.fromList $ map (SampleId . decodeUtf8With ignore) $ drop 9 (B.split (fromIntegral $ ord '\t') header)
+sampleIdsInHeader header = V.fromList $ map (SampleId . decodeUtf8With ignore) $ takeWhile ((>0) . B.length) $ drop 9 (B.split (fromIntegral $ ord '\t') header)
 
 
 parseVcfContent :: [(Position0, Position0)] -> [B.ByteString] -> Either Error [Variant]

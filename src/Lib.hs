@@ -110,8 +110,9 @@ findPatterns chr patterns peakFile referenceGenomeFile vcfFile resultFile = do
                     let sampleIndexes = V.iterateN (V.length sampleIdList) (+1) 0 :: V.Vector Int
                     let samples = M.fromList (zip (V.toList sampleIndexes) (V.toList sampleIdList))
                     t0 <- getPOSIXTime
-                    withFile resultFile WriteMode $ \fh ->
-                        runEffect $ compress defaultCompression (processPeaks t0 chr patterns takeReferenceGenome samples (zip [1..] peaks) variants) >-> PBS.toHandle fh
+                    withFile resultFile WriteMode $ \fh -> do
+                        let header = "chromosome\tpeakId\tpatternId\tsampleId\tmatchCount\n"
+                        runEffect $ compress defaultCompression (yield header >> processPeaks t0 chr patterns takeReferenceGenome samples (zip [1..] peaks) variants) >-> PBS.toHandle fh
                     return True
 
 processPeaks :: POSIXTime
@@ -126,9 +127,6 @@ processPeaks _ _ _ _ _ [] _ = yield B.empty
 processPeaks t0 chr patterns takeReferenceGenome samples ((peakId, peak):xs) variants = do
     t1 <- liftIO getPOSIXTime
     let (nextVariants, matches, numberOfHaplotypes, numberOfVariants, numberOfMatches) = processPeak patterns takeReferenceGenome samples peak variants
-    --case variants of
-    --    v:_ -> print (sampleIds v)
-    --    _   -> print "no var"
     t2 <- liftIO getPOSIXTime
     liftIO $ putStrLn $ formatStatus t0 t1 t2 peakId (length xs + peakId) numberOfHaplotypes numberOfVariants numberOfMatches
     yield (reportAsByteString chr (countsInPeak peakId matches))
@@ -186,6 +184,6 @@ instance Semigroup Count2 where
 
 reportAsByteString :: Chromosome -> M.Map (Int, Int, SampleId) Count2 -> B.ByteString
 reportAsByteString (Chromosome chr) d = TE.encodeUtf8 $ T.concat $ map formatLine (M.toList d)
-    where formatLine ((peakId, patternId, sampleId), Count2 c1 c2) = T.intercalate "\t" [showt chr, showt peakId, showt patternId, showt sampleId, showt c1 <> "/" <> showt c2 <> "\n"]
+    where formatLine ((peakId, patternId, (SampleId sampleId)), Count2 c1 c2) = T.intercalate "\t" [chr, showt peakId, showt patternId, sampleId, showt c1 <> "/" <> showt c2 <> "\n"]
     
     

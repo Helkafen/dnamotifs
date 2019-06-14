@@ -111,7 +111,7 @@ findPatterns chr patterns peakFile referenceGenomeFile vcfFile resultFile = do
                     let samples = M.fromList (zip (V.toList sampleIndexes) (V.toList sampleIdList))
                     t0 <- getPOSIXTime
                     withFile resultFile WriteMode $ \fh -> do
-                        let header = "chromosome\tpeakId\tpatternId\tsampleId\tmatchCount\n"
+                        let header = "chromosome\tpeakId\tpatternId\tsampleId\tmatchCount\t" <> TE.encodeUtf8 (T.intercalate "\t" (map (\(SampleId s) -> s) (V.toList sampleIdList)))  <> "\n"
                         runEffect $ compress defaultCompression (yield header >> processPeaks t0 chr patterns takeReferenceGenome samples (zip [1..] peaks) variants) >-> PBS.toHandle fh
                     return True
 
@@ -129,7 +129,7 @@ processPeaks t0 chr patterns takeReferenceGenome samples ((peakId, peak):xs) var
     let (nextVariants, matches, numberOfHaplotypes, numberOfVariants, numberOfMatches) = processPeak patterns takeReferenceGenome samples peak variants
     t2 <- liftIO getPOSIXTime
     liftIO $ putStrLn $ formatStatus t0 t1 t2 peakId (length xs + peakId) numberOfHaplotypes numberOfVariants numberOfMatches
-    yield (reportAsByteString chr (countsInPeak peakId matches))
+    yield (reportAsByteString chr (countsInPeak samples peakId matches))
     processPeaks t0 chr patterns takeReferenceGenome samples xs nextVariants
 
 formatStatus :: POSIXTime -> POSIXTime -> POSIXTime -> Int -> Int -> Int -> Int -> Int -> String
@@ -166,15 +166,16 @@ buildAllHaplotypes takeReferenceGenome (peakStart, peakEnd) sampleIdList variant
           allHaplotypeIds = Set.fromList [HaplotypeId x y | x <- sampleIdList, y <- [HaploLeft, HaploRight]]
 
 
-countsInPeak :: Int -> V.Vector (Match [HaplotypeId]) -> M.Map (Int, Int, SampleId) Count2
-countsInPeak peakId matches = M.unionsWith (<>) (map (countM peakId) (V.toList matches))
+countsInPeak :: M.Map Int SampleId -> Int -> V.Vector (Match [HaplotypeId]) -> [(Int, Int, [Count2])]
+countsInPeak samples peakId matches = map (\((patternId),counts) -> (peakId, patternId, counts)) (M.assocs byPatternId)
+    where byPatternId = fmap xxx $ M.fromList $ V.toList $ V.map (\(Match patternId _ _ haplotypeIds _) -> ((patternId), haplotypeIds)) matches :: M.Map Int [Count2]
+          xxx :: [HaplotypeId] -> [Count2]
+          xxx haplotypeIds = M.elems abc
+            where abc = M.fromListWith (<>) (map (\(HaplotypeId s h) -> (s, hToCount h)) haplotypeIds) `M.union` (M.fromList (map (,Count2 0 0) (M.elems samples))) :: M.Map SampleId Count2
 
-countM :: Int -> Match [HaplotypeId] -> M.Map (Int, Int, SampleId) Count2
-countM peakId (Match patternId _ _ haplotypeIds _) = fmap (\s -> (Count2 (count HaploLeft s) (count HaploRight s))) x
-    where x = M.fromListWith (<>) $ map (\(HaplotypeId sampleId haplo) -> ((peakId, patternId, sampleId), [haplo])) haplotypeIds :: M.Map (Int, Int, SampleId) [Haplotype]
-
-count :: Eq a => a -> [a] -> Int
-count x xs = (length . filter (== x)) xs
+hToCount :: Haplotype -> Count2
+hToCount HaploLeft = Count2 1 0
+hToCount HaploRight = Count2 0 1
 
 data Count2 = Count2 Int Int
     deriving (Show)
@@ -182,8 +183,10 @@ data Count2 = Count2 Int Int
 instance Semigroup Count2 where
     (Count2 x y) <> (Count2 z v) = Count2 (x+z) (y+v)
 
-reportAsByteString :: Chromosome -> M.Map (Int, Int, SampleId) Count2 -> B.ByteString
-reportAsByteString (Chromosome chr) d = TE.encodeUtf8 $ T.concat $ map formatLine (M.toList d)
-    where formatLine ((peakId, patternId, (SampleId sampleId)), Count2 c1 c2) = T.intercalate "\t" [chr, showt peakId, showt patternId, sampleId, showt c1 <> "/" <> showt c2 <> "\n"]
+reportAsByteString :: Chromosome -> [(Int, Int, [Count2])] -> B.ByteString
+reportAsByteString (Chromosome chr) xs = TE.encodeUtf8 $ T.concat $ map formatLine xs
+    where formatLine ((peakId, patternId, counts)) = (T.intercalate "\t" [chr,showt peakId, showt patternId, countsStr counts]) -- <> "\n"
+          formatCount (Count2 c1 c2) = showt c1 <> "|" <> showt c2
+          countsStr counts = T.intercalate "\t" (map formatCount counts) :: T.Text
     
     

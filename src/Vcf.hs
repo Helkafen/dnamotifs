@@ -26,13 +26,13 @@ import qualified Data.Vector as V
 import           Control.Monad (guard)
 import           Data.Functor (($>))
 import           Data.Either (rights, fromRight)
-import qualified Data.DList as DList
 import           Data.Word (Word8)
 import qualified Language.C.Inline               as C
 import           System.IO.Unsafe (unsafePerformIO)
 import           Foreign.C.Types                 (CInt)
 import           Foreign                         (Ptr, FunPtr)
 import           Foreign.ForeignPtr              (newForeignPtr)
+import           Data.Range.Range                (Range(..))
 
 import Types
 
@@ -94,16 +94,20 @@ fillVector s = unsafePerformIO go
 readGzippedLines :: FilePath -> IO [B.ByteString]
 readGzippedLines path = map BL.toStrict . BLC.lines . GZip.decompress <$> BL.readFile path
 
-
-filterOrderedIntervals :: Ord a => (b->a) -> [(a,a)] -> [b] -> [b]
-filterOrderedIntervals pos r xs = DList.toList (go r xs)
-    where go [] _ = DList.empty
-          go ((start,end):rs) l = 
+-- xs needs to be ordered in ascending order
+filterOrderedIntervals :: Ord a => (b->a) -> [Range a] -> [b] -> [(Range a, [b])]
+filterOrderedIntervals pos ranges xs = go ranges xs
+    where go [] _ = []
+          go (r@(SpanRange start end):rs) l = 
             let (vs, rest) =  span ((<=end) . pos) $ dropWhile ((<start) . pos) l
-            in DList.fromList vs <> go rs rest
+            in (r, vs):go rs rest
+          go ((SingletonRange x):rs) l = go ((SpanRange x x):rs) l
+          go (r@(LowerBoundRange start):_) l = [(r, dropWhile ((<start) . pos) l)]
+          go (r@(UpperBoundRange end):_) l = [(r, Prelude.takeWhile ((<=end) . pos) l)]
+          go (r@InfiniteRange:_) l = [(r, l)]
 
 
-readVcfWithGenotypes :: FilePath -> [(Position0, Position0)] -> IO (Either Error [Variant])
+readVcfWithGenotypes :: FilePath -> [Range Position0] -> IO (Either Error [(Range Position0, [Variant])])
 readVcfWithGenotypes path regions = do
     putStrLn ("Loading VCF file " <> path)
     (parseVcfContent regions . dropWhile ("##" `B.isPrefixOf`)) <$> readGzippedLines path
@@ -112,10 +116,10 @@ sampleIdsInHeader :: B.ByteString -> V.Vector SampleId
 sampleIdsInHeader header = V.fromList $ map (SampleId . decodeUtf8With ignore) $ Prelude.takeWhile ((>0) . B.length) $ drop 9 (B.split (fromIntegral $ ord '\t') header)
 
 
-parseVcfContent :: [(Position0, Position0)] -> [B.ByteString] -> Either Error [Variant]
+parseVcfContent :: [Range Position0] -> [B.ByteString] -> Either Error [(Range Position0, [Variant])]
 parseVcfContent regions vcfLines = case vcfLines of
     [] -> Left $ ParsingError "Empty vcf file"
-    (header:rest) -> pure $ rights (map (parseVariant sampleIdentifiers) (filterOrderedIntervals pos regions rest))-- TODO: exception for a left
+    (header:rest) -> pure $ map (\(r,variants) -> (r, rights $ map (parseVariant sampleIdentifiers) variants)) (filterOrderedIntervals pos regions rest) -- TODO: exception for a left
         where sampleIdentifiers = sampleIdsInHeader header
               pos :: B.ByteString -> Position0
               pos = Position . (\p -> p - 1) . fromRight (error "Bad position in vcf") . parseInt . B.takeWhile (/= tab) . B.drop 1  . B.dropWhile (/= tab)

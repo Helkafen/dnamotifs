@@ -33,6 +33,7 @@ dependencies:
 - pipes
 - pipes-zlib
 - pipes-bytestring
+- range
 
 ghc-options:
   - -Wall

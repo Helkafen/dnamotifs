@@ -26,6 +26,8 @@ import           Pipes.GZip (compress, defaultCompression)
 import qualified Pipes.ByteString as PBS
 import           System.IO (withFile, IOMode(..))
 
+import           Data.Range.Range (Range(..))
+import Debug.Trace (trace)
 
 
 
@@ -37,24 +39,25 @@ import PatternFind (findPatternsInBlock, mkPatterns, mkNucleotideAndPositionBloc
 
 
 -- Inclusive [Start, End] interval
-applyVariants :: (Position0 -> Position0 -> BaseSequencePosition) -> Position0 -> Position0 -> [Diff] -> BaseSequencePosition
-applyVariants takeReferenceGenome start end allDiffs =
+applyVariants :: (Range Position0 -> BaseSequencePosition) -> Range Position0 -> [Diff] -> BaseSequencePosition
+applyVariants takeReferenceGenome (SpanRange start end) allDiffs =
     let chunks = go start (filter (\(Diff p _ _) -> p >= start && p <= end) allDiffs)
     in BaseSequencePosition (B.concat (map seqOf chunks)) (STO.concat (map posOf chunks))
   where go :: Position0 -> [Diff] -> [BaseSequencePosition]
-        go refPosition [] = [takeReferenceGenome refPosition end]
+        go refPosition [] = [takeReferenceGenome (SpanRange refPosition end)]
         go refPosition diffs@(Diff pos ref alt:vs)
-            | pos > refPosition = takeReferenceGenome refPosition (pos-1): go pos diffs
+            | pos > refPosition = takeReferenceGenome (SpanRange refPosition (pos-1)): go pos diffs
             | pos == refPosition && B.length ref == 1 = -- SNV, insertion
                 BaseSequencePosition alt (STO.replicate (B.length alt) (fromIntegral refPosition)): go (refPosition + 1) vs
             | pos == refPosition && B.length alt == 1 = -- deletion
                 BaseSequencePosition alt (STO.singleton (fromIntegral refPosition)) : go (offSet refPosition (B.length ref)) vs
             | pos == refPosition = error "Missing case in applyVariants (we assume that ref or alt have length 1)"
-            | refPosition >= end = [takeReferenceGenome refPosition end]
+            | refPosition >= end = [takeReferenceGenome (SpanRange refPosition end)]
             | otherwise = [BaseSequencePosition B.empty STO.empty]
         seqOf (BaseSequencePosition nuc _) = nuc
         posOf (BaseSequencePosition _ pos) = pos
         offSet (Position x) o = Position (x + o)
+applyVariants _ _ _ = error "applyVariants is not implemented for other constructors of Range"
 
 
 loadPatterns :: FilePath -> IO Patterns
@@ -104,7 +107,8 @@ findPatterns chr patterns peakFile referenceGenomeFile vcfFile resultFile = do
             case vcf of
                 Left err -> print err >> return False
                 Right [] -> print ("No variant loaded" :: String) >> return False
-                Right variants@(x:_) -> do
+                Right ((_, []):_) -> print ("No variant loaded in the first peak" :: String) >> return False
+                Right variants@((_,x:_):_) -> do
                     let sampleIdList = sampleIds x
                     putStrLn $ "Population: " <> show (V.length sampleIdList)
                     let sampleIndexes = V.iterateN (V.length sampleIdList) (+1) 0 :: V.Vector Int
@@ -112,25 +116,24 @@ findPatterns chr patterns peakFile referenceGenomeFile vcfFile resultFile = do
                     t0 <- getPOSIXTime
                     withFile resultFile WriteMode $ \fh -> do
                         let header = "chromosome\tpeakId\tpatternId\tsampleId\tmatchCount\t" <> TE.encodeUtf8 (T.intercalate "\t" (map (\(SampleId s) -> s) (V.toList sampleIdList)))  <> "\n"
-                        runEffect $ compress defaultCompression (yield header >> processPeaks t0 chr patterns takeReferenceGenome samples (zip [1..] peaks) variants) >-> PBS.toHandle fh
+                        runEffect $ compress defaultCompression (yield header >> processPeaks t0 chr patterns takeReferenceGenome samples (zip [1..] variants)) >-> PBS.toHandle fh
                     return True
 
 processPeaks :: POSIXTime
              -> Chromosome
              -> Patterns
-             -> (Position0 -> Position0 -> BaseSequencePosition)
+             -> (Range Position0 -> BaseSequencePosition)
              -> M.Map Int SampleId
-             -> [(Int, (Position0, Position0))]
-             -> [Variant]
+             -> [(Int, (Range Position0, [Variant]))]
              -> Producer B.ByteString IO ()
-processPeaks _ _ _ _ _ [] _ = yield B.empty
-processPeaks t0 chr patterns takeReferenceGenome samples ((peakId, peak):xs) variants = do
+processPeaks _ _ _ _ _ [] = yield B.empty
+processPeaks t0 chr patterns takeReferenceGenome samples xs@((peakId,variants):nextVariants) = do
     t1 <- liftIO getPOSIXTime
-    let (nextVariants, matches, numberOfHaplotypes, numberOfVariants, numberOfMatches) = processPeak patterns takeReferenceGenome samples peak variants
+    let (matches, numberOfHaplotypes, numberOfVariants, numberOfMatches) = processPeak patterns takeReferenceGenome samples variants
     t2 <- liftIO getPOSIXTime
     liftIO $ putStrLn $ formatStatus t0 t1 t2 peakId (length xs + peakId) numberOfHaplotypes numberOfVariants numberOfMatches
     yield (reportAsByteString chr (countsInPeak samples peakId matches))
-    processPeaks t0 chr patterns takeReferenceGenome samples xs nextVariants
+    processPeaks t0 chr patterns takeReferenceGenome samples nextVariants
 
 formatStatus :: POSIXTime -> POSIXTime -> POSIXTime -> Int -> Int -> Int -> Int -> Int -> String
 formatStatus t0 t1 t2 peakId totalPeakNumber numberOfHaplotypes numberOfVariants numberOfMatches = 
@@ -144,24 +147,21 @@ formatStatus t0 t1 t2 peakId totalPeakNumber numberOfHaplotypes numberOfVariants
           matchesString = show numberOfMatches <> " matches"
 
 processPeak :: Patterns
-            -> (Position0 -> Position0 -> BaseSequencePosition)
+            -> (Range Position0 -> BaseSequencePosition)
             -> M.Map Int SampleId
-            -> (Position0, Position0)
-            -> [Variant]
-            -> ([Variant], V.Vector (Match [HaplotypeId]), Int, Int, Int)
-processPeak patterns takeReferenceGenome samples (peakStart, peakEnd) variants = do
-    let (variantsInPeak, nextVariants) = Data.List.span (\v -> position v <= peakEnd) $ dropWhile (\v -> position v < peakStart) variants
-
-    let haplotypes = buildAllHaplotypes takeReferenceGenome (peakStart, peakEnd) (M.elems samples) variantsInPeak
+            -> (Range Position0, [Variant])
+            -> (V.Vector (Match [HaplotypeId]), Int, Int, Int)
+processPeak patterns takeReferenceGenome samples (peak, variants) = do
+    let haplotypes = buildAllHaplotypes takeReferenceGenome peak (M.elems samples) variants
     let matches = findPatternsInBlock (mkNucleotideAndPositionBlock (V.map fst haplotypes)) patterns                                                      :: V.Vector (Match Int)
     let matchesWithSampleIds = V.map (\(Match patId score pos sampleId matched) -> Match patId score pos (snd $ haplotypes V.! sampleId) matched) matches :: V.Vector (Match [HaplotypeId])
 
-    (nextVariants, matchesWithSampleIds, length haplotypes, length variantsInPeak, V.sum (V.map (length . mSampleId) matchesWithSampleIds))
+    (matchesWithSampleIds, length haplotypes, length variants, V.sum (V.map (length . mSampleId) matchesWithSampleIds))
 
 
-buildAllHaplotypes :: (Position0 -> Position0 -> BaseSequencePosition) -> (Position0, Position0) -> [SampleId] -> [Variant] -> V.Vector (BaseSequencePosition, [HaplotypeId])
-buildAllHaplotypes takeReferenceGenome (peakStart, peakEnd) sampleIdList variants = V.fromList $ (takeReferenceGenome peakStart peakEnd, Set.toList samplesWithNoVariant) : haplotypes
-    where haplotypes = M.toList $ M.mapKeysWith (<>) (applyVariants takeReferenceGenome peakStart peakEnd . V.toList) (variantsToDiffs variants) :: [(BaseSequencePosition, [HaplotypeId])]
+buildAllHaplotypes :: (Range Position0 -> BaseSequencePosition) -> Range Position0 -> [SampleId] -> [Variant] -> V.Vector (BaseSequencePosition, [HaplotypeId])
+buildAllHaplotypes takeReferenceGenome peak sampleIdList variants = V.fromList $ (takeReferenceGenome peak, Set.toList samplesWithNoVariant) : haplotypes
+    where haplotypes = M.toList $ M.mapKeysWith (<>) (applyVariants takeReferenceGenome peak . V.toList) (variantsToDiffs variants) :: [(BaseSequencePosition, [HaplotypeId])]
           samplesWithNoVariant = Set.difference allHaplotypeIds (Set.fromList $ concatMap snd haplotypes) :: Set.Set HaplotypeId
           allHaplotypeIds = Set.fromList [HaplotypeId x y | x <- sampleIdList, y <- [HaploLeft, HaploRight]]
 

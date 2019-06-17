@@ -31,6 +31,7 @@ data TranscriptionFactor = TranscriptionFactor {
 -- Algorithm of Match: https://academic.oup.com/nar/article/31/13/3576/2904207
 -- HOCOMOCO: Explanation of PCM vs PWM files: http://www.cbrc.kaust.edu.sa/hocomoco/Details.php#400, https://academic.oup.com/nar/article/31/20/6016/1039515. And PWM cutoff: https://genome.cshlp.org/content/12/3/470.full
 -- Not really useful to use Information content to account for GC vs AT content, since humans have 46% AT.
+-- Coverage of motifs: https://bmcbioinformatics.biomedcentral.com/articles/10.1186/s12859-015-0573-5
 
 -- PCM files can be downloaded at http://hocomoco11.autosome.ru/final_bundle/hocomoco11/full/HUMAN/mono/pcm/ + PCM filename
 knownPatterns :: [TranscriptionFactor]

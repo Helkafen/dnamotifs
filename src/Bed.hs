@@ -8,27 +8,28 @@ import qualified Data.Text.IO as TIO
 import           Control.Applicative ((<*))
 import           Data.Functor (($>))
 import           Control.Monad (guard)
+import           Data.Range.Range (Range(..))
 
 import Types
 
-readPeaks :: Chromosome -> FilePath -> IO (Either String [(Position0, Position0)])
+readPeaks :: Chromosome -> FilePath -> IO (Either String [Range Position0])
 readPeaks chr path = do
     content <- TIO.readFile path
     return $ parseBedContent chr content --return [(Position 1000, Position 1010000)]
 
-parseBedContent :: Chromosome -> T.Text -> Either String [(Position0, Position0)]
-parseBedContent chr content = (map (\(_,s,e) -> (s,e)) . filter (\(ch,_,_) -> ch == chr)) <$> parseOnly parser content
+parseBedContent :: Chromosome -> T.Text -> Either String [Range Position0]
+parseBedContent chr content = (map snd . filter ((== chr) . fst)) <$> parseOnly parser content
 
-parser :: Parser [(Chromosome, Position0, Position0)]
+parser :: Parser [(Chromosome, Range Position0)]
 parser = lineParser `sepBy` (char '\n')
 
-lineParser :: Parser (Chromosome, Position0, Position0)
+lineParser :: Parser (Chromosome, Range Position0)
 lineParser = do
      chr <- chromosomeParser <* char '\t'
      s <- decimal <* char '\t'
      e <- decimal
      guard (s < e)
-     pure (chr, Position s, Position e)
+     pure (chr, SpanRange (Position s) (Position e))
 
 chromosomeParser :: Parser Chromosome
 chromosomeParser = choice [autosomeParser, xParser, yParser]

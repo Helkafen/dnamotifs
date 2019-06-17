@@ -118,7 +118,7 @@ data BaseSequencePosition = BaseSequencePosition {-# UNPACK #-} !BaseSequence {-
     deriving (Eq, Ord)
 
 instance Show BaseSequencePosition where
-  show (BaseSequencePosition nuc pos) = show (B.unpack nuc, STO.toList pos)
+  show (BaseSequencePosition nuc pos) = show (map Nucleotide (B.unpack nuc), STO.toList pos)
 
 newtype Chromosome = Chromosome { unChr :: Text }
   deriving (Eq, Show, Generic)

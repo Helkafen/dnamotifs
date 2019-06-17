@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Bed (parseBedContent, readPeaks) where
+module Bed (parseBedContent, readPeaks, merge) where
 
 import           Data.Attoparsec.Text
 import qualified Data.Text as T
@@ -8,9 +8,12 @@ import qualified Data.Text.IO as TIO
 import           Control.Applicative ((<*))
 import           Data.Functor (($>))
 import           Control.Monad (guard)
-import           Data.Range.Range (Range(..))
+import           Data.Range.Range (Range(..), mergeRanges)
 
 import Types
+
+merge :: (Ord a, Enum a) => [Range a] -> [Range a]
+merge = mergeRanges
 
 readPeaks :: Chromosome -> FilePath -> IO (Either String [Range Position0])
 readPeaks chr path = do
@@ -18,7 +21,7 @@ readPeaks chr path = do
     return $ parseBedContent chr content --return [(Position 1000, Position 1010000)]
 
 parseBedContent :: Chromosome -> T.Text -> Either String [Range Position0]
-parseBedContent chr content = (map snd . filter ((== chr) . fst)) <$> parseOnly parser content
+parseBedContent chr content = (merge . map snd . filter ((== chr) . fst)) <$> parseOnly parser content
 
 parser :: Parser [(Chromosome, Range Position0)]
 parser = lineParser `sepBy` (char '\n')

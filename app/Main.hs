@@ -11,6 +11,7 @@ import           Types
 import           PatternFind
 import           Lib                             (findPatterns)
 import           MotifDefinition                 (loadHocomocoMotifs)
+import           Data.List.Split                 (splitOn)
 
 
 -- http://jaspar.genereg.net/api/v1/matrix/XXXXX.meme  http://jaspar.genereg.net/matrix/XXXXX/ http://jaspar.genereg.net/download/bed_files/XXXXX.bed
@@ -127,14 +128,14 @@ main = do
 
         patterns <- loadHocomocoPatternsAndScoreThresholds "HOCOMOCOv11_core_pwms_HUMAN_mono.txt" "hocomoco_thresholds.tab" ["GATA1_HUMAN.H11MO.0.A"]
 
-        _ <- findPatterns (Chromosome "1") patterns "chr1.bed" "hg38.fa" "chr1.vcf.gz" "resultFile.tab.gz"
+        _ <- findPatterns (Chromosome "1") patterns ["chr1.bed"] "hg38.fa" "chr1.vcf.gz" "resultFile.tab.gz"
         pure ()
-      [chrom, referenceGenomeFastaFile, peakBedFile, vcfFile, motifsFile, score_thresholdsFile, outputFile] -> do
+      [chrom, referenceGenomeFastaFile, peakBedFiles, vcfFile, motifsFile, score_thresholdsFile, outputFile] -> do
         let wantedHocomocoPatterns = mapMaybe tfHocomocoId knownPatterns :: [T.Text]
         --patterns <- (mkPatterns . map snd . filter ((`elem` wantedHocomocoPatterns) . fst)) <$> loadHocomocoMotifs motifsFile score_thresholdsFile
         patterns <- loadHocomocoPatternsAndScoreThresholds motifsFile score_thresholdsFile wantedHocomocoPatterns
         
-        _ <- findPatterns (Chromosome $ T.pack chrom) patterns peakBedFile referenceGenomeFastaFile vcfFile outputFile
+        _ <- findPatterns (Chromosome $ T.pack chrom) patterns (splitOn "," peakBedFiles) referenceGenomeFastaFile vcfFile outputFile
         pure ()
       _ -> print ("Usage: xxx" :: String)
       

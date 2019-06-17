@@ -27,12 +27,13 @@ import qualified Pipes.ByteString as PBS
 import           System.IO (withFile, IOMode(..))
 
 import           Data.Range.Range (Range(..))
-import           Data.Either (partitionEithers)
+import           Control.Monad.Trans.Except
+import           Control.Monad.Except (throwError, lift)
 
 
 
 import Types
-import Bed (readPeaks, merge)
+import Bed (readPeaks, merge, readAllPeaks)
 import Fasta (loadFasta)
 import Vcf (readVcfWithGenotypes)
 import PatternFind (findPatternsInBlock, mkPatterns, mkNucleotideAndPositionBlock, Patterns)
@@ -94,31 +95,20 @@ variantToDiffs v = V.map (\i -> (i, HaploLeft, d)) (STO.convert (genotypesL v)) 
     where d = Diff (position v) (reference v) (alternative v)
 
 
-findPatterns :: Chromosome -> Patterns -> [FilePath] -> FilePath -> FilePath -> FilePath -> IO Bool
+findPatterns :: Chromosome -> Patterns -> [FilePath] -> FilePath -> FilePath -> FilePath -> ExceptT Error IO Bool
 findPatterns chr patterns peakFiles referenceGenomeFile vcfFile resultFile = do
     (takeReferenceGenome, referenceGenomeSize) <- loadFasta chr referenceGenomeFile
-    TIO.putStrLn $ "Chromosome " <> unChr chr <> " : " <> T.pack (show referenceGenomeSize) <> " bases"
-    --patterns <- loadPatterns ""
-    eitherBed <- mapM (readPeaks chr) peakFiles
-    case partitionEithers eitherBed of
-        (errors@(_:_),_) -> putStrLn ("Some bed files could not be read: " <> show errors) >> return False
-        ([], xs) -> do let bed = M.fromList (zip peakFiles xs)
-                       _ <- mapM (\(peakFile, ranges) -> putStrLn ("Bed file: "<>peakFile <> ": " <> show (length ranges) <> " peaks")) (zip peakFiles xs)
-                       vcf <- readVcfWithGenotypes vcfFile (Bed.merge (concat $ M.elems bed))
-                       case vcf of
-                           Left err -> print err >> return False
-                           Right [] -> print ("No variant loaded" :: String) >> return False
-                           Right ((_, []):_) -> print ("No variant loaded in the first peak" :: String) >> return False
-                           Right variants@((_,x:_):_) -> do
-                               let sampleIdList = sampleIds x
-                               putStrLn $ "Population: " <> show (V.length sampleIdList)
-                               let sampleIndexes = V.iterateN (V.length sampleIdList) (+1) 0 :: V.Vector Int
-                               let samples = M.fromList (zip (V.toList sampleIndexes) (V.toList sampleIdList))
-                               t0 <- getPOSIXTime
-                               withFile resultFile WriteMode $ \fh -> do
-                                   let header = "chromosome\tpeakId\tpatternId\tsampleId\tmatchCount\t" <> TE.encodeUtf8 (T.intercalate "\t" (map (\(SampleId s) -> s) (V.toList sampleIdList)))  <> "\n"
-                                   runEffect $ compress defaultCompression (yield header >> processPeaks t0 chr patterns takeReferenceGenome samples (zip [1..] variants)) >-> PBS.toHandle fh
-                               return True
+    lift $ TIO.putStrLn $ "Chromosome " <> unChr chr <> " : " <> T.pack (show referenceGenomeSize) <> " bases"
+    (allPeaks, peaksByFile) <- readAllPeaks chr peakFiles
+    (sampleIdList, variants) <- readVcfWithGenotypes vcfFile allPeaks
+    lift $ putStrLn $ "Population: " <> show (V.length sampleIdList)
+    let sampleIndexes = V.iterateN (V.length sampleIdList) (+1) 0 :: V.Vector Int
+    let samples = M.fromList (zip (V.toList sampleIndexes) (V.toList sampleIdList))
+    t0 <- lift $ getPOSIXTime
+    lift $ withFile resultFile WriteMode $ \fh -> do
+        let header = "chromosome\tpeakId\tpatternId\tsampleId\tmatchCount\t" <> TE.encodeUtf8 (T.intercalate "\t" (map (\(SampleId s) -> s) (V.toList sampleIdList)))  <> "\n"
+        runEffect $ compress defaultCompression (yield header >> processPeaks t0 chr patterns takeReferenceGenome samples (zip [1..] variants)) >-> PBS.toHandle fh
+    return True
 
 processPeaks :: POSIXTime
              -> Chromosome

@@ -35,6 +35,8 @@ dependencies:
 - pipes-bytestring
 - range
 - split
+- transformers
+- mtl
 
 ghc-options:
   - -Wall

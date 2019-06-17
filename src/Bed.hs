@@ -1,24 +1,43 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Bed (parseBedContent, readPeaks, merge) where
+module Bed (parseBedContent, readPeaks, merge, readAllPeaks) where
 
 import           Data.Attoparsec.Text
+import qualified Data.Map as M
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import           Control.Applicative ((<*))
 import           Data.Functor (($>))
 import           Control.Monad (guard)
 import           Data.Range.Range (Range(..), mergeRanges)
+import           Control.Monad.Trans.Except
+import           Control.Monad.Except (throwError, lift)
+import           Data.Either (partitionEithers)
 
 import Types
+
+readAllPeaks :: Chromosome -> [FilePath] -> ExceptT Error IO ([Range Position0], M.Map FilePath [Range Position0])
+readAllPeaks chr peakFiles = do
+    eitherBed <- lift $ mapM (readPeaks chr) peakFiles
+    case partitionEithers eitherBed of
+        (errors@(_:_),_) -> throwError (BedLoadingError $ "Some bed files could not be read: " <> show errors)
+        ([], xs) -> do
+            _ <- lift $ mapM (\(peakFile, ranges) -> putStrLn ("Bed file: "<>peakFile <> ": " <> show (length ranges) <> " peaks")) (zip peakFiles xs)
+            pure (merge (concat xs), M.fromList (zip peakFiles xs))
 
 merge :: (Ord a, Enum a) => [Range a] -> [Range a]
 merge = mergeRanges
 
-readPeaks :: Chromosome -> FilePath -> IO (Either String [Range Position0])
+readPeaks :: Chromosome -> FilePath -> IO (Either Error [Range Position0])
 readPeaks chr path = do
     content <- TIO.readFile path
-    return $ parseBedContent chr content --return [(Position 1000, Position 1010000)]
+    case parseBedContent chr content of
+        Left err -> return $ Left (BedLoadingError $ "File: " <> path <> ". Error: " <> err)
+        Right parsed ->
+            if (length parsed == 0)
+                then return $ Left (BedLoadingError $ "File: " <> path <> ". No peak loaded")
+                else return $ Right parsed
+
 
 parseBedContent :: Chromosome -> T.Text -> Either String [Range Position0]
 parseBedContent chr content = (merge . map snd . filter ((== chr) . fst)) <$> parseOnly parser content

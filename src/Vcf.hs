@@ -33,6 +33,8 @@ import           Foreign.C.Types                 (CInt)
 import           Foreign                         (Ptr, FunPtr)
 import           Foreign.ForeignPtr              (newForeignPtr)
 import           Data.Range.Range                (Range(..))
+import           Control.Monad.Trans.Except
+import           Control.Monad.Except (throwError, lift)
 
 import Types
 
@@ -107,10 +109,16 @@ filterOrderedIntervals pos ranges xs = go ranges xs
           go (r@InfiniteRange:_) l = [(r, l)]
 
 
-readVcfWithGenotypes :: FilePath -> [Range Position0] -> IO (Either Error [(Range Position0, [Variant])])
+readVcfWithGenotypes :: FilePath -> [Range Position0] -> ExceptT Error IO (V.Vector SampleId, [(Range Position0, [Variant])])
 readVcfWithGenotypes path regions = do
-    putStrLn ("Loading VCF file " <> path)
-    (parseVcfContent regions . dropWhile ("##" `B.isPrefixOf`)) <$> readGzippedLines path
+    lift $ putStrLn ("Loading VCF file " <> path)
+    vcf <- lift $ (parseVcfContent regions . dropWhile ("##" `B.isPrefixOf`)) <$> readGzippedLines path
+    case vcf of
+      Left err -> throwError err
+      Right [] -> throwError (VcfLoadingError ("No variant loaded"))
+      Right ((_, []):_) -> throwError (VcfLoadingError "No variant loaded in the first peak")
+      Right variants@((_,x:_):_) -> pure (sampleIds x, variants)
+
 
 sampleIdsInHeader :: B.ByteString -> V.Vector SampleId
 sampleIdsInHeader header = V.fromList $ map (SampleId . decodeUtf8With ignore) $ Prelude.takeWhile ((>0) . B.length) $ drop 9 (B.split (fromIntegral $ ord '\t') header)

@@ -175,7 +175,7 @@ instance NFData Diff
 instance Show Diff where
   show (Diff (Position p) ref alt) = "Diff " <> show p <> ": " <> showBaseSequence ref <> "->" <> showBaseSequence alt
 
-data Error = ParsingError Text | MissingFile FilePath | NoVariantFound FilePath
+data Error = ParsingError Text | MissingFile FilePath | NoVariantFound FilePath | VcfLoadingError String | FastaLoadingError String | BedLoadingError String
   deriving (Eq, Show, Generic)
 
 instance NFData Error

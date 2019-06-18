@@ -9,11 +9,11 @@ import qualified Data.Vector.Generic             as G
 import           Data.Monoid                     ((<>))
 import qualified Data.Text                       as T
 import qualified Data.ByteString                 as B
-import qualified Data.Map                        as M
 import           Foreign.C.Types                 (CInt)
 import           Data.Text.Encoding              (encodeUtf8)
 import qualified Data.Map
 import           Data.Char                       (ord)
+import           Data.Maybe                      (fromJust)
 
 import Types
 import Range
@@ -23,6 +23,7 @@ import Fasta (takeRef)
 import Vcf (parseVariant, filterOrderedIntervals, parseVcfContent, fillVector)
 import Bed (parseBedContent)
 import MotifDefinition (parseHocomocoMotifsContent)
+import Haplotype (applyVariants, variantsToDiffs)
 
 mkSeq :: [Nucleotide] -> B.ByteString
 mkSeq = B.pack . map unNuc
@@ -208,7 +209,7 @@ test_filterOrderedIntervals_1 = do
   let inf = [10..]
   let range1 = Range (Position 15) (Position 18)
   let range2 = Range (Position 20) (Position 23)
-  let (Just ranges) = mkRanges [range1, range2]
+  let ranges = fromJust $ mkRanges [range1, range2]
   --assertEqual (isRight ranges) True
   let filtered = filterOrderedIntervals Position ranges inf
   assertEqual [(range1, [15, 16, 17, 18]), (range2, [20, 21, 22, 23])] filtered
@@ -243,7 +244,7 @@ test_parseVcfContent_1 = do
             ] :: [B.ByteString]
   let range1 = Range (Position 5) (Position 15)
   let range2 = Range (Position 18) (Position 25)
-  let (Just ranges) = mkRanges [range1, range2]
+  let ranges = fromJust $ mkRanges [range1, range2]
   let parsed = parseVcfContent ranges vcf
   let var p = Variant (Chromosome "1") (Position p) (Just $ "name" <> T.pack (show p)) (mkSeq [c]) (mkSeq [a]) (G.fromList []) (G.fromList [1])  (G.fromList [SampleId "sample1", SampleId "sample2"])
   let expected = Right [(range1, [var 5, var 12, var 15]), (range2, [var 21])]
@@ -253,7 +254,7 @@ test_parseBed_1 :: IO ()
 test_parseBed_1 = do
   let bedContent = "chr1\t5\t6\nchr1\t8\t10\nchr2\t100\t110" :: T.Text
   let parsed = parseBedContent (Chromosome "1") bedContent
-  let (Just expected) = mkRanges [Range (Position 5) (Position 6), Range (Position 8) (Position 10)]
+  let expected = fromJust $ mkRanges [Range (Position 5) (Position 6), Range (Position 8) (Position 10)]
   assertEqual (Right expected) parsed
 
 
@@ -270,7 +271,6 @@ test_motif_parser_1 = do
                                           ,Pweight{wa = 1986, wc = 2979, wg = 0, wt = 26036}])
   assertEqual (Right [expected]) parsed
 
---  variantsToDiffs :: [Variant] -> M.Map (V.Vector Diff) [HaplotypeId]
 test_variantsToDiffs_1 :: IO ()
 test_variantsToDiffs_1 = do
   let sampleIdentifiers = G.fromList [SampleId "sample1", SampleId "sample2"]
@@ -297,7 +297,8 @@ test_variantsToDiffs_2 = do
 test_processPeak_1 :: IO()
 test_processPeak_1 = do
   let chr = Chromosome "1"
-  let patterns = mkPatterns [Pattern 2000 pattern_CG, Pattern 2000 pattern_AT, Pattern 2000 pattern_TC]
+  let pattern_CCCG = Pattern 4000 ((replicate 3 (Pweight 0 1000 0 0)) ++ [Pweight 0 0 1000 0])
+  let patterns = mkPatterns [Pattern 2000 pattern_CG, Pattern 2000 pattern_AT, Pattern 2000 pattern_TC, pattern_CCCG]
   let ref = takeRef (B.pack (map (fromIntegral . ord) "AAAACCCGGGTTT"))
   --                                                       T            -- Sample 0, haplotype Left
   --                                                              C     -- Sample 0, haplotype Right
@@ -316,8 +317,9 @@ test_processPeak_1 = do
   let (matches, numberOfHaplotypes, numberOfVariants, numberOfMatches) = processPeak patterns ref samples (range1, variants)
   assertEqual 3 numberOfHaplotypes -- Including the reference genome. Only on interval [3->7]
   assertEqual 2 numberOfVariants
-  assertEqual 5 numberOfMatches
-  let expectedMatches = [Match 0 2000 6 [HaplotypeId (SampleId "sample0") HaploRight, HaplotypeId (SampleId "sample1") HaploLeft] [c,g],
+  assertEqual 7 numberOfMatches
+  let expectedMatches = [Match 3 4000 4 [HaplotypeId (SampleId "sample0") HaploRight, HaplotypeId (SampleId "sample1") HaploLeft] [c,c,c,g], -- This line matches the reference genome
+                         Match 0 2000 6 [HaplotypeId (SampleId "sample0") HaploRight, HaplotypeId (SampleId "sample1") HaploLeft] [c,g],
                          Match 1 2000 3 [HaplotypeId (SampleId "sample0") HaploLeft]                                              [a,t],
                          Match 2 2000 4 [HaplotypeId (SampleId "sample0") HaploLeft]                                              [t,c],
                          Match 0 2000 6 [HaplotypeId (SampleId "sample0") HaploLeft]                                              [c,g]]

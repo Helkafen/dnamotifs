@@ -132,6 +132,9 @@ newtype Position0 = Position Int
 
 instance NFData Position0
 
+instance TextShow Position0 where
+  showb (Position p) = showb p
+
 -- The ID of a person
 newtype SampleId = SampleId Text
   deriving (Eq, Ord, Show, Generic)

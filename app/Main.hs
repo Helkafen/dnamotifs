@@ -131,7 +131,7 @@ main = do
 
         result <- runExceptT $ findPatterns (Chromosome "1") patterns ["chr1.bed"] "hg38.fa" "chr1.vcf.gz" "resultFile.tab.gz"
         print result
-      [chrom, referenceGenomeFastaFile, peakBedFiles, vcfFile, motifsFile, score_thresholdsFile, outputFile] -> do
+      [chrom, peakBedFiles, referenceGenomeFastaFile, vcfFile, motifsFile, score_thresholdsFile, outputFile] -> do
         let wantedHocomocoPatterns = mapMaybe tfHocomocoId knownPatterns :: [T.Text]
         --patterns <- (mkPatterns . map snd . filter ((`elem` wantedHocomocoPatterns) . fst)) <$> loadHocomocoMotifs motifsFile score_thresholdsFile
         patterns <- loadHocomocoPatternsAndScoreThresholds motifsFile score_thresholdsFile wantedHocomocoPatterns

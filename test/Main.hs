@@ -9,13 +9,14 @@ import qualified Data.Vector.Generic             as G
 import           Data.Monoid                     ((<>))
 import qualified Data.Text                       as T
 import qualified Data.ByteString                 as B
+import qualified Data.Map                        as M
 import           Foreign.C.Types                 (CInt)
 import           Data.Text.Encoding              (encodeUtf8)
 import qualified Data.Map
 import           Data.Char                       (ord)
-import           Data.Range.Range                (Range(..))
 
 import Types
+import Range
 import PatternFind
 import Lib
 import Fasta (takeRef)
@@ -128,72 +129,72 @@ refGenome = takeRef (B.pack [65,67,71,84]) -- ACGT
 
 test_apply_variant_1 :: IO ()
 test_apply_variant_1 = do
-  let patched = applyVariants refGenome (SpanRange (Position 1) (Position 2)) []
+  let patched = applyVariants refGenome (Range (Position 1) (Position 2)) []
   assertEqual (BaseSequencePosition (mkSeq [c,g]) (STO.fromList [1,2])) patched
 
 test_apply_variant_2 :: IO ()
 test_apply_variant_2 = do
-  let patched = applyVariants refGenome (SpanRange (Position 0) (Position 2)) []
+  let patched = applyVariants refGenome (Range (Position 0) (Position 2)) []
   assertEqual (BaseSequencePosition (mkSeq [a, c, g]) (STO.fromList [0,1,2])) patched
 
 test_apply_variant_3 :: IO ()
 test_apply_variant_3 = do
-  let patched = applyVariants refGenome (SpanRange (Position 0) (Position 5)) []
+  let patched = applyVariants refGenome (Range (Position 0) (Position 5)) []
   assertEqual (BaseSequencePosition (mkSeq [a,c,g,t]) (STO.fromList [0,1,2,3])) patched
 
 test_apply_variant_4 :: IO ()
 test_apply_variant_4 = do
-  let patched = applyVariants refGenome (SpanRange (Position 1) (Position 2)) [Diff 100 (mkSeq [a]) (mkSeq [c])]
+  let patched = applyVariants refGenome (Range (Position 1) (Position 2)) [Diff 100 (mkSeq [a]) (mkSeq [c])]
   assertEqual (BaseSequencePosition (mkSeq [c,g]) (STO.fromList [1,2])) patched
 
 test_apply_variant_5 :: IO ()
 test_apply_variant_5 = do
-  let patched = applyVariants refGenome (SpanRange (Position 1) (Position 2)) [Diff 1 (mkSeq [c]) (mkSeq [n])]
+  let patched = applyVariants refGenome (Range (Position 1) (Position 2)) [Diff 1 (mkSeq [c]) (mkSeq [n])]
   assertEqual (BaseSequencePosition (mkSeq [n,g]) (STO.fromList [1,2])) patched
 
 test_apply_variant_6 :: IO ()
 test_apply_variant_6 = do
-  let patched = applyVariants refGenome (SpanRange (Position 1) (Position 2)) [Diff 2 (mkSeq [g]) (mkSeq [a])]
+  let patched = applyVariants refGenome (Range (Position 1) (Position 2)) [Diff 2 (mkSeq [g]) (mkSeq [a])]
   assertEqual (BaseSequencePosition (mkSeq [c,a]) (STO.fromList [1,2])) patched
 
 test_apply_variant_7 :: IO ()
 test_apply_variant_7 = do
-  let patched = applyVariants refGenome (SpanRange (Position 1) (Position 2)) [Diff 1 (mkSeq [c]) (mkSeq [n]), Diff 2 (mkSeq [g]) (mkSeq [a])]
+  let patched = applyVariants refGenome (Range (Position 1) (Position 2)) [Diff 1 (mkSeq [c]) (mkSeq [n]), Diff 2 (mkSeq [g]) (mkSeq [a])]
   assertEqual (BaseSequencePosition (mkSeq [n,a]) (STO.fromList [1,2])) patched
 
 test_apply_variant_8 :: IO ()
 test_apply_variant_8 = do
-  let patched = applyVariants refGenome (SpanRange (Position 1) (Position 2)) [Diff 0 (mkSeq [c]) (mkSeq [n]), Diff 4 (mkSeq [g]) (mkSeq [a])]
+  let patched = applyVariants refGenome (Range (Position 1) (Position 2)) [Diff 0 (mkSeq [c]) (mkSeq [n]), Diff 4 (mkSeq [g]) (mkSeq [a])]
   assertEqual (BaseSequencePosition (mkSeq [c,g]) (STO.fromList [1,2])) patched
 
 test_apply_variant_9 :: IO ()
 test_apply_variant_9 = do
-  let patched = applyVariants refGenome (SpanRange (Position 1) (Position 2)) [Diff 1 (mkSeq [c]) (mkSeq [n,n])]
+  let patched = applyVariants refGenome (Range (Position 1) (Position 2)) [Diff 1 (mkSeq [c]) (mkSeq [n,n])]
   assertEqual (BaseSequencePosition (mkSeq[n,n,g]) (STO.fromList [1,1,2])) patched
 
 test_apply_variant_10 :: IO ()
 test_apply_variant_10 = do
-  let patched = applyVariants refGenome (SpanRange (Position 1) (Position 2)) [Diff 2 (mkSeq [c]) (mkSeq [n,n])]
+  let patched = applyVariants refGenome (Range (Position 1) (Position 2)) [Diff 2 (mkSeq [c]) (mkSeq [n,n])]
   assertEqual (BaseSequencePosition (mkSeq[c,n,n]) (STO.fromList[1,2,2])) patched
 
 test_apply_variant_11 :: IO ()
 test_apply_variant_11 = do
-  let patched = applyVariants refGenome (SpanRange (Position 1) (Position 2)) [Diff 3 (mkSeq [c]) (mkSeq [n,n])]
+  let patched = applyVariants refGenome (Range (Position 1) (Position 2)) [Diff 3 (mkSeq [c]) (mkSeq [n,n])]
   assertEqual (BaseSequencePosition (mkSeq[c,g]) (STO.fromList [1,2])) patched
 
 test_apply_variant_12 :: IO ()
 test_apply_variant_12 = do
-  let patched = applyVariants refGenome (SpanRange (Position 1) (Position 2)) [Diff 1 (mkSeq [c, g]) (mkSeq [n])]
+  let patched = applyVariants refGenome (Range (Position 1) (Position 2)) [Diff 1 (mkSeq [c, g]) (mkSeq [n])]
   assertEqual (BaseSequencePosition (mkSeq[n]) (STO.fromList [1])) patched
 
 test_apply_variant_13 :: IO ()
 test_apply_variant_13 = do
-  let patched = applyVariants refGenome (SpanRange (Position 1) (Position 2)) [Diff 2 (mkSeq [g, t]) (mkSeq [n])]
+  let patched = applyVariants refGenome (Range (Position 1) (Position 2)) [Diff 2 (mkSeq [g, t]) (mkSeq [n])]
   assertEqual (BaseSequencePosition (mkSeq[c,n]) (STO.fromList [1,2])) patched
 
 test_apply_variant_14 :: IO ()
 test_apply_variant_14 = do
-  let patched = applyVariants refGenome (SpanRange (Position 1) (Position 2)) [Diff 0 (mkSeq [a, c, g]) (mkSeq [n, n])]
+  let patched = applyVariants refGenome (Range (Position 1) (Position 2)) [Diff 0 (mkSeq [a, c, g]) (mkSeq [n, n])]
   assertEqual (BaseSequencePosition (mkSeq[c,g]) (STO.fromList [1,2])) patched -- For simplicity, do not apply a Diff that starts before the window we're observing
 
 test_parse_1 :: IO ()
@@ -205,9 +206,11 @@ test_parse_1 = do
 test_filterOrderedIntervals_1 :: IO ()
 test_filterOrderedIntervals_1 = do
   let inf = [10..]
-  let range1 = SpanRange (Position 15) (Position 18)
-  let range2 = SpanRange (Position 20) (Position 23)
-  let filtered = filterOrderedIntervals Position [range1, range2] inf
+  let range1 = Range (Position 15) (Position 18)
+  let range2 = Range (Position 20) (Position 23)
+  let (Just ranges) = mkRanges [range1, range2]
+  --assertEqual (isRight ranges) True
+  let filtered = filterOrderedIntervals Position ranges inf
   assertEqual [(range1, [15, 16, 17, 18]), (range2, [20, 21, 22, 23])] filtered
 
 test_fillVector1 :: IO ()
@@ -238,9 +241,10 @@ test_parseVcfContent_1 = do
              "chr1\t18\tname17\tC\tA\t\t\t\t\t0/0\t0/1",
              "chr1\t22\tname21\tC\tA\t\t\t\t\t0/0\t0/1"
             ] :: [B.ByteString]
-  let range1 = SpanRange (Position 5) (Position 15)
-  let range2 = SpanRange (Position 18) (Position 25)
-  let parsed = parseVcfContent [range1, range2] vcf
+  let range1 = Range (Position 5) (Position 15)
+  let range2 = Range (Position 18) (Position 25)
+  let (Just ranges) = mkRanges [range1, range2]
+  let parsed = parseVcfContent ranges vcf
   let var p = Variant (Chromosome "1") (Position p) (Just $ "name" <> T.pack (show p)) (mkSeq [c]) (mkSeq [a]) (G.fromList []) (G.fromList [1])  (G.fromList [SampleId "sample1", SampleId "sample2"])
   let expected = Right [(range1, [var 5, var 12, var 15]), (range2, [var 21])]
   assertEqual expected parsed
@@ -249,8 +253,8 @@ test_parseBed_1 :: IO ()
 test_parseBed_1 = do
   let bedContent = "chr1\t5\t6\nchr1\t8\t10\nchr2\t100\t110" :: T.Text
   let parsed = parseBedContent (Chromosome "1") bedContent
-  let expected = Right [SpanRange (Position 5) (Position 6), SpanRange (Position 8) (Position 10)]
-  assertEqual expected parsed
+  let (Just expected) = mkRanges [Range (Position 5) (Position 6), Range (Position 8) (Position 10)]
+  assertEqual (Right expected) parsed
 
 
 motifString :: T.Text
@@ -304,7 +308,7 @@ test_processPeak_1 = do
 
   let samples = Data.Map.fromList [(0, SampleId "sample0"), (1, SampleId "sample1")]
   let sampleIdentifiers = G.fromList [SampleId "sample0", SampleId "sample1"]
-  let range1 = SpanRange (Position 3) (Position 7)
+  let range1 = Range (Position 3) (Position 7)
   let variant1 = Variant chr (Position 4)  (Just "1:4:C:T")  (mkSeq [c]) (mkSeq [t]) (G.fromList [0]) (G.fromList []) sampleIdentifiers
   let variant2 = Variant chr (Position 7)  (Just "1:7:G:A")  (mkSeq [g]) (mkSeq [a]) (G.fromList []) (G.fromList [1]) sampleIdentifiers
   --let variant3 = Variant chr (Position 11) (Just "1:11:T:C") (mkSeq [t]) (mkSeq [c]) (G.fromList []) (G.fromList [0]) sampleIdentifiers

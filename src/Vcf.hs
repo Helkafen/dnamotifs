@@ -32,11 +32,11 @@ import           System.IO.Unsafe (unsafePerformIO)
 import           Foreign.C.Types                 (CInt)
 import           Foreign                         (Ptr, FunPtr)
 import           Foreign.ForeignPtr              (newForeignPtr)
-import           Data.Range.Range                (Range(..))
 import           Control.Monad.Trans.Except
 import           Control.Monad.Except (throwError, lift)
 
 import Types
+import Range
 
 C.context (C.baseCtx <> C.vecCtx <> C.fptrCtx <> C.bsCtx)
 
@@ -96,20 +96,15 @@ fillVector s = unsafePerformIO go
 readGzippedLines :: FilePath -> IO [B.ByteString]
 readGzippedLines path = map BL.toStrict . BLC.lines . GZip.decompress <$> BL.readFile path
 
--- xs needs to be ordered in ascending order
-filterOrderedIntervals :: Ord a => (b->a) -> [Range a] -> [b] -> [(Range a, [b])]
-filterOrderedIntervals pos ranges xs = go ranges xs
+filterOrderedIntervals :: Ord a => (b->a) -> Ranges a -> [b] -> [(Range a, [b])]
+filterOrderedIntervals pos ranges xs = go (getRanges ranges) xs
     where go [] _ = []
-          go (r@(SpanRange start end):rs) l = 
+          go (r@(Range start end):rs) l = 
             let (vs, rest) =  span ((<=end) . pos) $ dropWhile ((<start) . pos) l
             in (r, vs):go rs rest
-          go ((SingletonRange x):rs) l = go ((SpanRange x x):rs) l
-          go (r@(LowerBoundRange start):_) l = [(r, dropWhile ((<start) . pos) l)]
-          go (r@(UpperBoundRange end):_) l = [(r, Prelude.takeWhile ((<=end) . pos) l)]
-          go (r@InfiniteRange:_) l = [(r, l)]
 
 
-readVcfWithGenotypes :: FilePath -> [Range Position0] -> ExceptT Error IO (V.Vector SampleId, [(Range Position0, [Variant])])
+readVcfWithGenotypes :: FilePath -> Ranges Position0 -> ExceptT Error IO ([SampleId], [(Range Position0, [Variant])])
 readVcfWithGenotypes path regions = do
     lift $ putStrLn ("Loading VCF file " <> path)
     vcf <- lift $ (parseVcfContent regions . dropWhile ("##" `B.isPrefixOf`)) <$> readGzippedLines path
@@ -117,14 +112,14 @@ readVcfWithGenotypes path regions = do
       Left err -> throwError err
       Right [] -> throwError (VcfLoadingError ("No variant loaded"))
       Right ((_, []):_) -> throwError (VcfLoadingError "No variant loaded in the first peak")
-      Right variants@((_,x:_):_) -> pure (sampleIds x, variants)
+      Right variants@((_,x:_):_) -> pure (V.toList (sampleIds x), variants)
 
 
 sampleIdsInHeader :: B.ByteString -> V.Vector SampleId
 sampleIdsInHeader header = V.fromList $ map (SampleId . decodeUtf8With ignore) $ Prelude.takeWhile ((>0) . B.length) $ drop 9 (B.split (fromIntegral $ ord '\t') header)
 
 
-parseVcfContent :: [Range Position0] -> [B.ByteString] -> Either Error [(Range Position0, [Variant])]
+parseVcfContent :: Ranges Position0 -> [B.ByteString] -> Either Error [(Range Position0, [Variant])]
 parseVcfContent regions vcfLines = case vcfLines of
     [] -> Left $ ParsingError "Empty vcf file"
     (header:rest) -> pure $ map (\(r,variants) -> (r, rights $ map (parseVariant sampleIdentifiers) variants)) (filterOrderedIntervals pos regions rest) -- TODO: exception for a left

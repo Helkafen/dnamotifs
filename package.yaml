@@ -33,7 +33,6 @@ dependencies:
 - pipes
 - pipes-zlib
 - pipes-bytestring
-- range
 - split
 - transformers
 - mtl

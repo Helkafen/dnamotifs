@@ -53,12 +53,9 @@ test_patterns_basic :: IO ()
 test_patterns_basic = do
     assertEqual expected (findPatternsInBlock (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns))
   where inputData = V.fromList [BaseSequencePosition inputDataSample0 inputDataPositions]
-
         inputDataPositions :: STO.Vector CInt
         inputDataPositions = STO.fromList $ take (B.length inputDataSample0) [(0::CInt)..]
-
         patterns = [Pattern 2000 pattern_CG]
-
         expected = V.fromList [Match {mPatternId = 0,  mScore = 2000, mPosition = 4, mSampleId = 0, mMatched = [c,g]}]
 
 test_patterns_basic2 :: IO ()
@@ -373,5 +370,5 @@ prop_countsInPeak_4 matches =
 
 
 main :: IO ()
-main = 
+main =
   htfMainWithArgs ["--quiet"] htf_thisModulesTests

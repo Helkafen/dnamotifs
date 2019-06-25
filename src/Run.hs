@@ -59,12 +59,12 @@ processPeaks t0 chr patterns takeReferenceGenome peaksByFile samples xs@((peakId
     let !bs = B.concat report
     yield bs
     t2 <- getCurrentTime
-    when (B.length bs == 0) (logWarn "No match for this peak")
+    when (B.length bs == (-1)) (logWarn "No match for this peak")
     logInfo $ display $ formatStatus t0 t1 t2 peakId (length xs + peakId) numberOfHaplotypes numberOfVariants numberOfMatches
     processPeaks t0 chr patterns takeReferenceGenome peaksByFile samples nextVariants
 
 formatStatus :: UTCTime -> UTCTime -> UTCTime -> Int -> Int -> Int -> Int -> Int -> T.Text
-formatStatus t0 t1 t2 peakId totalPeakNumber numberOfHaplotypes numberOfVariants numberOfMatches = 
+formatStatus t0 t1 t2 peakId totalPeakNumber numberOfHaplotypes numberOfVariants numberOfMatches =
     T.pack $ intercalate " \t" [peakNumberString, timeString, haploString, variantsString, matchesString]
     where peakTime  = round $ (toRational $ diffUTCTime t2 t1) * 1000000000 :: Integer
           totalTime = round $ (toRational $ diffUTCTime t2 t0) * 1000000000 :: Integer

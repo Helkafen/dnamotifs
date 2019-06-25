@@ -57,7 +57,7 @@ processPeaks :: POSIXTime
              -> Chromosome
              -> Patterns
              -> (Range Position0 -> BaseSequencePosition)
-             -> M.Map FilePath (Ranges Position0)
+             -> M.Map T.Text (Ranges Position0)
              -> M.Map Int SampleId
              -> [(Int, (Range Position0, [Variant]))]
              -> Producer B.ByteString IO ()
@@ -65,7 +65,7 @@ processPeaks _ _ _ _ _ _ [] = yield B.empty
 processPeaks t0 chr patterns takeReferenceGenome peaksByFile samples xs@((peakId,variants@(peak,_)):nextVariants) = do
     t1 <- liftIO getPOSIXTime
     let (matches, numberOfHaplotypes, numberOfVariants, numberOfMatches) = processPeak patterns takeReferenceGenome samples variants
-    let rangesInThisPeak = M.map (overlaps peak . getRanges) peaksByFile :: M.Map FilePath [Range Position0]
+    let rangesInThisPeak = M.map (overlaps peak . getRanges) peaksByFile :: M.Map T.Text [Range Position0]
     let report = M.elems $ M.mapWithKey (\file ranges -> reportAsByteString chr file (countsInPeaks samples matches ranges)) rangesInThisPeak :: [B.ByteString]
     let !bs = B.concat report
     yield bs
@@ -103,8 +103,9 @@ countsInPeaks :: M.Map Int SampleId -> V.Vector (Match [HaplotypeId]) -> [Range 
 countsInPeaks samples matches peaks = concatMap (countsInPeak samples matches) peaks
 
 countsInPeak :: M.Map Int SampleId -> V.Vector (Match [HaplotypeId]) -> Range Position0 -> [(Range Position0, Int, [Count2])]
-countsInPeak samples matches peak = map (\(Match patternId _ _ haplotypeIds _) -> (peak, patternId, toCounts haplotypeIds)) matchesInPeak
-    where matchesInPeak = filter (inRange peak . Position . mPosition) (V.toList matches)
+countsInPeak samples matches peak = map (\((patternId),counts) -> (peak, patternId, counts)) (M.assocs byPatternId)
+    where byPatternId = M.fromListWith (<>) $ V.toList $ V.map (\(Match patternId _ _ haplotypeIds _) -> (patternId, toCounts haplotypeIds)) inPeak :: M.Map Int [Count2]
+          inPeak = V.filter (inRange peak . Position . mPosition) matches
           toCounts :: [HaplotypeId] -> [Count2]
           toCounts haplotypeIds = M.elems abc
             where abc = M.fromListWith (<>) (map (\(HaplotypeId s h) -> (s, hToCount h)) haplotypeIds) `M.union` (M.fromList (map (,Count2 0 0) (M.elems samples))) :: M.Map SampleId Count2
@@ -119,9 +120,8 @@ data Count2 = Count2 Int Int
 instance Semigroup Count2 where
     (Count2 x y) <> (Count2 z v) = Count2 (x+z) (y+v)
 
-reportAsByteString :: Chromosome -> FilePath -> [(Range Position0, Int, [Count2])] -> B.ByteString
+reportAsByteString :: Chromosome -> T.Text -> [(Range Position0, Int, [Count2])] -> B.ByteString
 reportAsByteString (Chromosome chr) filename xs = TE.encodeUtf8 $ T.concat $ map formatLine xs
-    where formatLine ((Range s e, patternId, counts)) = (T.intercalate "\t" [chr, path, showt s, showt e, showt patternId, countsStr counts]) <> "\n"
+    where formatLine ((Range s e, patternId, counts)) = (T.intercalate "\t" [chr, filename, showt s, showt e, showt patternId, countsStr counts]) <> "\n"
           formatCount (Count2 c1 c2) = showt c1 <> "|" <> showt c2
           countsStr counts = T.intercalate "\t" (map formatCount counts) :: T.Text
-          path = T.pack filename

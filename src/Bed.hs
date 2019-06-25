@@ -13,18 +13,23 @@ import           Control.Monad.Trans.Except
 import           Control.Monad.Except (throwError, lift)
 import           Data.Either (partitionEithers)
 import           Data.List (sort)
+import           System.FilePath.Posix (takeFileName)
 
 import Types
 import Range
 
-readAllPeaks :: Chromosome -> [FilePath] -> ExceptT Error IO (Ranges Position0, M.Map FilePath (Ranges Position0))
+readAllPeaks :: Chromosome -> [FilePath] -> ExceptT Error IO (Ranges Position0, M.Map T.Text (Ranges Position0))
 readAllPeaks chr peakFiles = do
     eitherBed <- lift $ mapM (readPeaks chr) peakFiles
     case partitionEithers eitherBed of
         (errors@(_:_),_) -> throwError (BedLoadingError $ "Some bed files could not be read: " <> show errors)
         ([], xs) -> do
             _ <- lift $ mapM (\(peakFile, ranges) -> putStrLn ("Bed file: "<>peakFile <> ": " <> show (rangesLength ranges) <> " peaks")) (zip peakFiles xs)
-            pure (mconcat xs, M.fromList (zip peakFiles xs))
+            pure (mconcat xs, simplifyFilenames $ M.fromList (zip peakFiles xs))
+
+simplifyFilenames :: M.Map FilePath a -> M.Map T.Text a
+simplifyFilenames d = M.mapKeys T.pack (if M.size fileNamesOnly == M.size d then fileNamesOnly else d)
+    where fileNamesOnly = M.mapKeys takeFileName d
 
 
 readPeaks :: Chromosome -> FilePath -> IO (Either Error (Ranges Position0))

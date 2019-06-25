@@ -38,11 +38,19 @@ dependencies:
 - mtl
 - filepath
 - QuickCheck
+- rio
+
+default-extensions: NoImplicitPrelude
 
 ghc-options:
   - -Wall
   - -Wincomplete-uni-patterns
   - -Wincomplete-record-updates
+  - -Wcompat
+  - -Widentities
+  - -Wpartial-fields
+  - -Wredundant-constraints
+  - -fwarn-unused-imports
  # - -fplugin Foreign.Storable.Generic.Plugin   # Is supposed to make Storable instances faster. Doesn't seem to make a difference
 
 _exe-ghc-options: &exe-ghc-options

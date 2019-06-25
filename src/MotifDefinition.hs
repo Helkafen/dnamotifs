@@ -3,19 +3,16 @@ module MotifDefinition (loadHocomocoMotifs, parseHocomocoMotifsContent) where
 
 import           Data.Attoparsec.Text
 import qualified Data.Text as T
-import qualified Data.Text.IO as TIO
-import           Control.Applicative ((<*))    
-import           Data.Either (partitionEithers)
 
-import Types
+import Import
 
 
-loadHocomocoMotifs :: FilePath -> IO [(T.Text, [Pweight])]
-loadHocomocoMotifs path = do putStr ("Load motif file " <> path <> " ... ")
-                             content <- TIO.readFile path
+loadHocomocoMotifs :: HasLogFunc env => FilePath -> RIO env [(T.Text, [Pweight])]
+loadHocomocoMotifs path = do 
+                             content <- readFileUtf8 path
                              case parseHocomocoMotifsContent content of
-                                Left errors -> print (show errors) >> error ("Motif loading error")
-                                Right patterns -> putStrLn ("Done") >> return patterns
+                                Left errors -> throwM (MotifLoadingError $ "Load motif file " <> path <> ": Error. " <> show errors)
+                                Right patterns -> logInfo (display $ "Loaded motif file" <> (T.pack path)) >> return patterns --  TODO <> path
 
 parseHocomocoMotifsContent :: T.Text -> Either [String] [(T.Text, [Pweight])]
 parseHocomocoMotifsContent content =
@@ -33,10 +30,10 @@ hocomocoPatternParser = do
 
 weightsParser :: Parser Pweight
 weightsParser = do
-    aWeight <- realToFrac <$> (double <* char '\t')
-    cWeight <- realToFrac <$> (double <* char '\t')
-    gWeight <- realToFrac <$> (double <* char '\t')
-    tWeight <- realToFrac <$> double
+    aWeight <- double <* char '\t'
+    cWeight <- double <* char '\t'
+    gWeight <- double <* char '\t'
+    tWeight <- double
     pure (Pweight (round $ 1000 * (aWeight :: Double)) (round $ 1000 * (cWeight  :: Double)) (round $ 1000 * (gWeight :: Double)) (round $ 1000 * (tWeight :: Double)))
 
 

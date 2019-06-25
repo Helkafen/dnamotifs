@@ -6,14 +6,16 @@ import qualified Data.Map                        as M
 import           System.Environment              (getArgs)
 import           Data.List                       (elem)
 import           Data.Maybe                      (mapMaybe)
-import           Control.Monad                   (mapM_)
 import           Types
 import           PatternFind
-import           Lib                             (findPatterns)
+import           Run                             (findPatterns)
 import           MotifDefinition                 (loadHocomocoMotifs)
 import           Data.List.Split                 (splitOn)
-import           Control.Monad.Except            (runExceptT)
+import           RIO.Prelude.Simple              (runSimpleApp)
 
+
+import Import
+import RIO.Partial (read)
 
 -- http://jaspar.genereg.net/api/v1/matrix/XXXXX.meme  http://jaspar.genereg.net/matrix/XXXXX/ http://jaspar.genereg.net/download/bed_files/XXXXX.bed
 -- http://hocomoco11.autosome.ru/final_bundle/hocomoco11/full/HUMAN/mono/pwm/XXX.pwm
@@ -96,23 +98,22 @@ knownPatterns = [
   TranscriptionFactor "NHLH1"   (Just "MA0048.2") Nothing (Just "HEN1_HUMAN.H11MO.0.C"),
   TranscriptionFactor "LYL1"    Nothing Nothing (Just "LYL1_HUMAN.H11MO.0.A")]
 
-loadHocomocoPatternsAndScoreThresholds :: FilePath -> FilePath -> [T.Text] -> IO Patterns
+loadHocomocoPatternsAndScoreThresholds :: HasLogFunc env => FilePath -> FilePath -> [T.Text] -> RIO env Patterns
 loadHocomocoPatternsAndScoreThresholds pwmFile thresholdsFile wantedHocomocoPatterns = do
-   thresholds <- (M.fromList . map (\l -> (T.pack (takeWhile (/='\t') l), read (reverse (takeWhile (/='\t') (reverse l))))) . lines) <$> readFile thresholdsFile :: IO (M.Map T.Text Float)
-   print (M.keys thresholds)
-   patterns <- (M.fromList . filter ((`elem` wantedHocomocoPatterns) . fst)) <$> loadHocomocoMotifs pwmFile :: IO (M.Map T.Text [Pweight])
-   print (M.keys patterns)
+   thresholds <- (M.fromList . map (\l -> (firstColumn l, lastColumn l)) . T.lines) <$> readFileUtf8 thresholdsFile-- :: RIO env (M.Map T.Text Float)
+   patterns <- (M.fromList . filter ((`elem` wantedHocomocoPatterns) . fst)) <$> loadHocomocoMotifs pwmFile-- :: RIO env (M.Map T.Text [Pweight])
    let i = M.intersectionWith Pattern (fmap (floor . (*1000)) thresholds) patterns
-   print i
    pure $ mkPatterns $ map snd $ M.toAscList i
-   --pure $ mkPatterns $ map snd $ M.toAscList $ M.intersectionWith Pattern (fmap (floor . (*1000)) thresholds) patterns
+   where firstColumn = T.takeWhile (/='\t')
+         lastColumn :: T.Text -> Double
+         lastColumn = read . T.unpack . T.reverse . T.takeWhile (/='\t') . T.reverse
    
 
 main :: IO()
 main = do
     args <- getArgs
 
-    case args of
+    runSimpleApp $ case args of
       [] -> do
         -- From http://schemer.buenrostrolab.com :
         --JUNB SMARCC1 FOSL2 FOSL1 JUND GATA1 JUN                  GATA2 FOS    BATF GATA3 BACH1 ATF3 BACH2 FOSB BCL11A BCL11B JDP2 GATA5 NFE2  SPI1D GATA4 CEBPB CEBPA SPIB IRF8      SPI1 CEBPD
@@ -123,20 +124,20 @@ main = do
         --let wantedHocomocoPatterns = mapMaybe tfHocomocoId knownPatterns :: [T.Text]
         --patterns <- (mkPatterns . map snd . filter ((`elem` wantedHocomocoPatterns) . fst)) <$> loadHocomocoMotifs "HOCOMOCOv11_core_pwms_HUMAN_mono.txt"
     
-        gata1 <- (map snd . filter ((== "GATA1_HUMAN.H11MO.0.A") . fst)) <$> loadHocomocoMotifs "HOCOMOCOv11_core_pwms_HUMAN_mono.txt"
-        putStrLn "GATA1 motif:"
-        mapM_ (mapM_ print) gata1
-
+        --gata1 <- (map snd . filter ((== "GATA1_HUMAN.H11MO.0.A") . fst)) <$> loadHocomocoMotifs "HOCOMOCOv11_core_pwms_HUMAN_mono.txt"
+        --putStrLn "GATA1 motif:"
+        --mapM_ (mapM_ print) gata1
         patterns <- loadHocomocoPatternsAndScoreThresholds "HOCOMOCOv11_core_pwms_HUMAN_mono.txt" "hocomoco_thresholds.tab" ["GATA1_HUMAN.H11MO.0.A"]
-
-        result <- runExceptT $ findPatterns (Chromosome "1") patterns ["chr1.bed"] "hg38.fa" "chr1.vcf.gz" "resultFile.tab.gz"
-        print result
+        success <- findPatterns (Chromosome "1") patterns ["chr1.bed"] "hg38.fa" "chr1.vcf.gz" "resultFile.tab.gz"
+        if success
+          then logInfo "Success"
+          else logError "Error"
       [chrom, peakBedFiles, referenceGenomeFastaFile, vcfFile, motifsFile, score_thresholdsFile, outputFile] -> do
         let wantedHocomocoPatterns = mapMaybe tfHocomocoId knownPatterns :: [T.Text]
-        --patterns <- (mkPatterns . map snd . filter ((`elem` wantedHocomocoPatterns) . fst)) <$> loadHocomocoMotifs motifsFile score_thresholdsFile
         patterns <- loadHocomocoPatternsAndScoreThresholds motifsFile score_thresholdsFile wantedHocomocoPatterns
-        
-        result <- runExceptT $ findPatterns (Chromosome $ T.pack chrom) patterns (splitOn "," peakBedFiles) referenceGenomeFastaFile vcfFile outputFile
-        print result
-      _ -> print ("Usage: xxx" :: String)
+        success <- findPatterns (Chromosome $ T.pack chrom) patterns (splitOn "," peakBedFiles) referenceGenomeFastaFile vcfFile outputFile
+        if success
+          then logInfo "Success"
+          else logError "Error"
+      _ -> logError "Usage: xxx"
       

@@ -1,28 +1,31 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-module PatternFind ( findPatternsInBlock, mkPatterns, mkNucleotideAndPositionBlock, NucleotideAndPositionBlock, Patterns, blockInfo ) where
+module PatternFind ( findPatternsInBlock, mkPatterns, mkNucleotideAndPositionBlock, NucleotideAndPositionBlock, Patterns) where
 
 import           Foreign                         (Ptr, alloca, peek, FunPtr) 
 import           Foreign.ForeignPtr              (newForeignPtr)
 import           Foreign.C.Types                 (CInt)
 import qualified Language.C.Inline               as C
-import qualified Data.Vector.Storable            as STO
-import qualified Data.Vector                     as V
-import qualified Data.ByteString                 as B
-import           Data.Monoid                     ((<>))
-import           Data.Maybe                      (mapMaybe)
+import qualified RIO.Vector.Storable             as STO
+import qualified RIO.Vector.Storable.Unsafe      as STO (unsafeFromForeignPtr0)
+import qualified RIO.Vector.Boxed                as V
+import qualified RIO.ByteString                  as B
 import           System.IO.Unsafe                (unsafePerformIO)
 
-import Types
+import Import
+import           RIO.List                        (splitAt, maximumMaybe)
 
 newtype Patterns = Patterns (STO.Vector CInt)
 
 -- numberOfPeople, blockSize, nucleotides, positions
 data NucleotideAndPositionBlock = NucleotideAndPositionBlock {-# UNPACK #-}!Int {-# UNPACK #-}!Int {-# UNPACK #-}!B.ByteString {-# UNPACK #-}!(STO.Vector CInt)
 
-blockInfo :: NucleotideAndPositionBlock -> String
-blockInfo (NucleotideAndPositionBlock numberOfHaplotypes blockSize _ positions) = "block " <> show numberOfHaplotypes <> " " <> show blockSize <> " " <> show (STO.minimum positions) <> " " <> show (STO.maximum positions)
+--blockInfo :: NucleotideAndPositionBlock -> String
+--blockInfo (NucleotideAndPositionBlock numberOfHaplotypes blockSize _ positions) = 
+--    if (STO.null positions)
+--        then "block " <> show numberOfHaplotypes <> " (empty)"
+--        else "block " <> show numberOfHaplotypes <> " " <> show blockSize <> " " <> show (STO.minimum positions) <> " " <> show (STO.maximum positions)
 
 vectorToMatches :: STO.Vector CInt -> V.Vector (Match Int)
 vectorToMatches v = V.fromList $ reverse $ mapMaybe toMatch (list4uple $ STO.toList v)
@@ -52,7 +55,7 @@ padBS (Nucleotide e) len v = B.append v (B.replicate (len - B.length v) e)
 mkNucleotideAndPositionBlock :: V.Vector BaseSequencePosition -> NucleotideAndPositionBlock
 mkNucleotideAndPositionBlock xs = NucleotideAndPositionBlock numberOfPeople max_length (B.concat $ V.toList $ V.map (padBS n max_length . seqOf) xs) (mconcat $ V.toList $ V.map (pad 0 max_length . posOf) xs)
     where numberOfPeople = V.length xs
-          max_length = maximum (V.map (B.length . seqOf) xs)
+          max_length = fromMaybe 0 $ maximumMaybe (V.map (B.length . seqOf) xs)
           seqOf (BaseSequencePosition nuc _) = nuc
           posOf (BaseSequencePosition _ pos) = pos
 

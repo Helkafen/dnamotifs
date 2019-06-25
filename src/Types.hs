@@ -16,19 +16,20 @@ module Types (
   Diff(..),
   Error(..),
   HaplotypeId(..),
+  Env(..)
 ) where
 
-import           Data.Text (Text)
-import qualified Data.ByteString as B
-import qualified Data.Text as T
-import qualified Data.Vector as V
-import qualified Data.Vector.Storable as STO
+import           RIO
+import qualified RIO.Text as T
+import qualified RIO.ByteString as B
+import qualified RIO.Vector.Boxed as V
+import qualified RIO.Vector.Storable as STO
+
 import           Foreign.C.Types                 (CInt)
-import           Data.Word (Word8)
 import           Foreign.Storable.Generic
-import           GHC.Generics
+import           GHC.Generics ()
 import           TextShow
-import           Control.DeepSeq
+import           Control.DeepSeq ()
 import           Test.QuickCheck
 import           Control.Applicative (liftA2)
 
@@ -144,7 +145,7 @@ data BaseSequencePosition = BaseSequencePosition {-# UNPACK #-} !BaseSequence {-
 instance Show BaseSequencePosition where
   show (BaseSequencePosition nuc pos) = show (map Nucleotide (B.unpack nuc), STO.toList pos)
 
-newtype Chromosome = Chromosome { unChr :: Text }
+newtype Chromosome = Chromosome { unChr :: T.Text }
   deriving (Eq, Show, Generic)
 
 instance NFData Chromosome
@@ -160,7 +161,7 @@ instance TextShow Position0 where
   showb (Position p) = showb p
 
 -- The ID of a person
-newtype SampleId = SampleId Text
+newtype SampleId = SampleId T.Text
   deriving (Eq, Ord, Show, Generic)
 
 instance NFData SampleId
@@ -174,7 +175,7 @@ instance TextShow SampleId where
 data Variant = Variant {
     chromosome :: !Chromosome,
     position :: !Position0,
-    variantId :: !(Maybe Text),
+    variantId :: !(Maybe T.Text),
     reference :: !BaseSequence,
     alternative :: !BaseSequence,
     genotypesL :: !(STO.Vector Int),
@@ -202,10 +203,16 @@ instance NFData Diff
 instance Show Diff where
   show (Diff (Position p) ref alt) = "Diff " <> show p <> ": " <> showBaseSequence ref <> "->" <> showBaseSequence alt
 
-data Error = ParsingError Text | MissingFile FilePath | NoVariantFound FilePath | VcfLoadingError String | FastaLoadingError String | BedLoadingError String
+data Error = ParsingError T.Text | MissingFile FilePath | NoVariantFound FilePath | VcfLoadingError String | FastaLoadingError String | BedLoadingError String | MotifLoadingError String
   deriving (Eq, Show, Generic)
+
+instance Exception Error
 
 instance NFData Error
 
 data HaplotypeId = HaplotypeId !SampleId !Haplotype
   deriving (Eq, Ord, Show)
+
+data Env = Env {
+  dummyEnv :: Int
+}

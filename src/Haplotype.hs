@@ -7,7 +7,7 @@ import qualified Data.Map as M
 import qualified Data.Set as Set
 import           Data.Vector.Algorithms.Merge (sort)
 
-import Types
+import Import
 import Range
 
 -- Inclusive [Start, End] interval

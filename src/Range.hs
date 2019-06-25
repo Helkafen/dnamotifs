@@ -9,7 +9,8 @@ module Range (
     rangesLength
 ) where
 
-import Data.List (sort)
+import RIO
+import RIO.List (sort)
 
 data Range a = Range a a
     deriving (Eq, Ord, Show)
@@ -30,7 +31,7 @@ isSortedAndDisjoint [] = True
 isSortedAndDisjoint [_] = True
 isSortedAndDisjoint ((Range s e):(Range s2 e2):xs) = s <= e && s < s2 && e <= s2 && isSortedAndDisjoint ((Range s2 e2):xs)
 
-mergeRanges :: (Show a, Ord a) => Ranges a -> Ranges a
+mergeRanges :: Ord a => Ranges a -> Ranges a
 mergeRanges (Ranges ranges) = Ranges (go sortedRanges)
     where sortedRanges = sort ranges
           go [] = []

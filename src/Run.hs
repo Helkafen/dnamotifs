@@ -3,31 +3,19 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE BangPatterns #-}
 
-module Lib where
+module Run where
 
 import qualified Data.Map as M
-import qualified Data.List
 import qualified Data.Vector as V
 import qualified Data.ByteString as B
 import qualified Data.Text as T
-import qualified Data.Text.IO as TIO
 import qualified Data.Text.Encoding as TE
---import           System.IO (appendFile)
 import           TextShow (showt)
-import           Data.Time.Clock.POSIX (getPOSIXTime, POSIXTime)
-import           Data.List (iterate)
-
---import qualified Data.ByteString.Lazy as BL
---import qualified Codec.Compression.GZip as GZip
-
-import           Pipes (Producer, liftIO, yield, (>->), runEffect)
+import           RIO.List (iterate, intercalate)
+import           Pipes (Producer, yield, (>->), runEffect)
 import           Pipes.GZip (compress, defaultCompression)
 import qualified Pipes.ByteString as PBS
-import           System.IO (withFile, IOMode(..))
-
-import           Control.Monad.Trans.Except
-import           Control.Monad.Except (lift)
-import           Control.Monad (when)
+import           System.IO (IOMode(..))
 
 
 import Types
@@ -37,48 +25,49 @@ import Fasta (loadFasta)
 import Vcf (readVcfWithGenotypes)
 import PatternFind (findPatternsInBlock, mkNucleotideAndPositionBlock, Patterns)
 import Haplotype (buildAllHaplotypes)
+import Import
 
 
-findPatterns :: Chromosome -> Patterns -> [FilePath] -> FilePath -> FilePath -> FilePath -> ExceptT Error IO Bool
+findPatterns :: HasLogFunc env => Chromosome -> Patterns -> [FilePath] -> FilePath -> FilePath -> FilePath -> RIO env Bool
 findPatterns chr patterns peakFiles referenceGenomeFile vcfFile resultFile = do
     (takeReferenceGenome, referenceGenomeSize) <- loadFasta chr referenceGenomeFile
-    lift $ TIO.putStrLn $ "Chromosome " <> unChr chr <> " : " <> T.pack (show referenceGenomeSize) <> " bases"
+    logInfo $ display $ "Chromosome " <> unChr chr <> " : " <> T.pack (show referenceGenomeSize) <> " bases"
     (allPeaks, peaksByFile) <- readAllPeaks chr peakFiles
     (sampleIdList, variants) <- readVcfWithGenotypes vcfFile allPeaks
-    lift $ putStrLn $ "Population: " <> show (length sampleIdList)
+    logInfo $ display $ T.pack $ "Population: " <> show (length sampleIdList)
     let samples = M.fromList (zip (iterate (+1) 0) sampleIdList)
-    t0 <- lift $ getPOSIXTime
-    lift $ withFile resultFile WriteMode $ \fh -> do
+    t0 <- getCurrentTime
+    Import.withFile resultFile WriteMode $ \fh -> do
         let header = "chromosome\tsource\tpeakStart\tpeakStop\tpatternId\tsampleId\tmatchCount\t" <> TE.encodeUtf8 (T.intercalate "\t" (map (\(SampleId s) -> s) sampleIdList))  <> "\n"
         runEffect $ compress defaultCompression (yield header >> processPeaks t0 chr patterns takeReferenceGenome peaksByFile samples (zip [1..] variants)) >-> PBS.toHandle fh
     return True
 
-processPeaks :: POSIXTime
+processPeaks :: HasLogFunc env => UTCTime
              -> Chromosome
              -> Patterns
              -> (Range Position0 -> BaseSequencePosition)
              -> M.Map T.Text (Ranges Position0)
              -> M.Map Int SampleId
              -> [(Int, (Range Position0, [Variant]))]
-             -> Producer B.ByteString IO ()
+             -> Producer B.ByteString (RIO env) ()
 processPeaks _ _ _ _ _ _ [] = yield B.empty
 processPeaks t0 chr patterns takeReferenceGenome peaksByFile samples xs@((peakId,variants@(peak,_)):nextVariants) = do
-    t1 <- liftIO getPOSIXTime
+    t1 <- getCurrentTime
     let (matches, numberOfHaplotypes, numberOfVariants, numberOfMatches) = processPeak patterns takeReferenceGenome samples variants
     let rangesInThisPeak = M.map (overlaps peak . getRanges) peaksByFile :: M.Map T.Text [Range Position0]
     let report = M.elems $ M.mapWithKey (\file ranges -> reportAsByteString chr file (countsInPeaks samples matches ranges)) rangesInThisPeak :: [B.ByteString]
     let !bs = B.concat report
     yield bs
-    t2 <- liftIO getPOSIXTime
-    when (B.length bs == 0) (lift $ putStrLn "No match for this peak")
-    liftIO $ putStrLn $ formatStatus t0 t1 t2 peakId (length xs + peakId) numberOfHaplotypes numberOfVariants numberOfMatches
+    t2 <- getCurrentTime
+    when (B.length bs == 0) (logWarn "No match for this peak")
+    logInfo $ display $ formatStatus t0 t1 t2 peakId (length xs + peakId) numberOfHaplotypes numberOfVariants numberOfMatches
     processPeaks t0 chr patterns takeReferenceGenome peaksByFile samples nextVariants
 
-formatStatus :: POSIXTime -> POSIXTime -> POSIXTime -> Int -> Int -> Int -> Int -> Int -> String
+formatStatus :: UTCTime -> UTCTime -> UTCTime -> Int -> Int -> Int -> Int -> Int -> T.Text
 formatStatus t0 t1 t2 peakId totalPeakNumber numberOfHaplotypes numberOfVariants numberOfMatches = 
-    Data.List.intercalate " \t" [peakNumberString, timeString, haploString, variantsString, matchesString]
-    where peakTime = round $ (t2 - t1) * 1000 :: Integer
-          totalTime = round $ (t2 - t0) * 1000 :: Integer
+    T.pack $ intercalate " \t" [peakNumberString, timeString, haploString, variantsString, matchesString]
+    where peakTime  = round $ (toRational $ diffUTCTime t2 t1) * 1000000000 :: Integer
+          totalTime = round $ (toRational $ diffUTCTime t2 t0) * 1000000000 :: Integer
           peakNumberString = "Peak " <> show peakId <> "/" <> show totalPeakNumber
           timeString = show peakTime <> " ms (" <> show totalTime <> " total)"
           haploString = show numberOfHaplotypes <> " haplotypes"

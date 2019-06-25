@@ -2,35 +2,32 @@
 
 module Fasta (loadFasta, takeRef) where
 
-import qualified Data.Vector.Storable as STO
-import qualified Data.ByteString      as B
-import qualified Data.ByteString.Lazy as BL
+import qualified RIO.Vector.Storable as STO
+import qualified RIO.ByteString      as B
+import qualified RIO.ByteString.Lazy as BL
+import qualified RIO.ByteString.Lazy.Partial as BLP
 import qualified Data.ByteString.Lazy.Char8 as BLC
-import qualified Data.Text as T
-import           Data.Char (ord)
-import           Data.Word (Word8)
-import           Control.Monad.Trans.Except
-import           Control.Monad.Except (throwError, lift)
+import qualified RIO.Text as T
 
-import Types
+import Import
 import Range
+import RIO.List.Partial (tail)
 
 
 -- Hand tested (not anymore)
-loadFasta :: Chromosome -> FilePath -> ExceptT Error IO (Range Position0 -> BaseSequencePosition, Int)
+loadFasta :: HasLogFunc env => Chromosome -> FilePath -> RIO env (Range Position0 -> BaseSequencePosition, Int)
 loadFasta (Chromosome chr) filename = 
-    do lift $ putStr ("Load reference genome " <> filename <> " ... ")
-       -- BL.head is safe because we filtered out the empty lines earlier
-       alphaBaseSequence <- lift $ (BL.toStrict . BL.concat . takeWhile (\l -> BL.head l /= separator) . tail . dropWhile (/=wantedHeader) . filter (not . BL.null) . BLC.lines) <$> BL.readFile filename
+    do -- BL.head is safe because we filtered out the empty lines earlier
+       alphaBaseSequence <- (BL.toStrict . BL.concat . takeWhile (\l -> BLP.head l /= separator) . tail . dropWhile (/=wantedHeader) . filter (not . BL.null) . BLC.lines) <$> BL.readFile filename
        if B.length alphaBaseSequence == 0
-         then throwError (FastaLoadingError "sequence is empty")
-         else lift $ putStrLn "Done"
+         then throwM (FastaLoadingError $ "Load reference genome " <> filename <> ": sequence is empty")
+         else logInfo (display $ "Load reference genome " <> (T.pack filename))
        pure (takeRef alphaBaseSequence, B.length alphaBaseSequence)
     where separator = fromIntegral (ord '>') :: Word8
           wantedHeader = BLC.pack (">chr"<>T.unpack chr) :: BL.ByteString
 
 takeRef :: B.ByteString -> Range Position0 -> BaseSequencePosition
 takeRef referenceGenome (Range (Position s) (Position e)) = BaseSequencePosition bases positions
-    where end = minimum [e, B.length referenceGenome - 1]
+    where end = min e (B.length referenceGenome - 1)
           bases = B.map (unNuc . toNuc) $ B.take (end-s+1) (B.drop s referenceGenome)
           positions = STO.fromListN (end-s+1) (map fromIntegral [s..end+1])

@@ -5,37 +5,30 @@
 
 module Vcf (readVcfWithGenotypes, parseVariant, filterOrderedIntervals, parseVcfContent, fillVector) where
 
-import           Data.Text.Encoding (decodeUtf8With)
-import           Data.Text.Encoding.Error (ignore)
-
-import           Data.Text (Text)
-import qualified Data.Text as T
+import qualified RIO.Text as T
 
 import qualified Codec.Compression.GZip as GZip
-import qualified Data.ByteString as B
-import qualified Data.ByteString.Lazy as BL
+import qualified RIO.ByteString as B
+import qualified RIO.ByteString.Lazy as BL
 import qualified Data.ByteString.Lazy.Char8 as BLC
-import           Data.Either.Combinators (mapLeft)
-import           Data.Char (ord)
-import qualified Data.Vector.Storable as STO
+
+import qualified RIO.Vector.Storable as STO
+import qualified RIO.Vector.Storable.Partial as STO (head)
+import qualified RIO.Vector.Storable.Unsafe as STO (unsafeFromForeignPtr0)
 
 import           Data.Attoparsec.ByteString
 import           Data.Attoparsec.ByteString.Char8 (decimal, letter_ascii)
 
 import qualified Data.Vector as V
-import           Control.Monad (guard)
-import           Data.Functor (($>))
-import           Data.Either (rights, fromRight)
-import           Data.Word (Word8)
+
 import qualified Language.C.Inline               as C
 import           System.IO.Unsafe (unsafePerformIO)
 import           Foreign.C.Types                 (CInt)
 import           Foreign                         (Ptr, FunPtr)
 import           Foreign.ForeignPtr              (newForeignPtr)
-import           Control.Monad.Trans.Except
-import           Control.Monad.Except (throwError, lift)
 
-import Types
+
+import Import
 import Range
 
 C.context (C.baseCtx <> C.vecCtx <> C.fptrCtx <> C.bsCtx)
@@ -89,11 +82,11 @@ fillVector s = unsafePerformIO go
                 let lenR = STO.head (STO.drop 1 vec)
                 let left = STO.take lenL (STO.drop 2 vec)
                 let right = STO.take lenR (STO.drop (2+lenL) vec)
-                pure (STO.map fromIntegral left, STO.map fromIntegral right)
+                pure (left, right)
         len = fromIntegral (B.length s)
 
 
-readGzippedLines :: FilePath -> IO [B.ByteString]
+readGzippedLines :: FilePath -> RIO env [B.ByteString]
 readGzippedLines path = map BL.toStrict . BLC.lines . GZip.decompress <$> BL.readFile path
 
 filterOrderedIntervals :: Ord a => (b->a) -> Ranges a -> [b] -> [(Range a, [b])]
@@ -104,19 +97,19 @@ filterOrderedIntervals pos ranges xs = go (getRanges ranges) xs
             in (r, vs):go rs rest
 
 
-readVcfWithGenotypes :: FilePath -> Ranges Position0 -> ExceptT Error IO ([SampleId], [(Range Position0, [Variant])])
+readVcfWithGenotypes :: HasLogFunc env => FilePath -> Ranges Position0 -> RIO env ([SampleId], [(Range Position0, [Variant])])
 readVcfWithGenotypes path regions = do
-    lift $ putStrLn ("Loading VCF file " <> path)
-    vcf <- lift $ (parseVcfContent regions . dropWhile ("##" `B.isPrefixOf`)) <$> readGzippedLines path
+    logInfo (display $ T.pack ("Loading VCF file " <> path))
+    vcf <- (parseVcfContent regions . dropWhile ("##" `B.isPrefixOf`)) <$> readGzippedLines path
     case vcf of
-      Left err -> throwError err
-      Right [] -> throwError (VcfLoadingError ("No variant loaded"))
-      Right ((_, []):_) -> throwError (VcfLoadingError "No variant loaded in the first peak")
+      Left err -> throwM err
+      Right [] -> throwM (VcfLoadingError ("No variant loaded"))
+      Right ((_, []):_) -> throwM (VcfLoadingError "No variant loaded in the first peak")
       Right variants@((_,x:_):_) -> pure (V.toList (sampleIds x), variants)
 
 
 sampleIdsInHeader :: B.ByteString -> V.Vector SampleId
-sampleIdsInHeader header = V.fromList $ map (SampleId . decodeUtf8With ignore) $ Prelude.takeWhile ((>0) . B.length) $ drop 9 (B.split (fromIntegral $ ord '\t') header)
+sampleIdsInHeader header = V.fromList $ map (SampleId . decodeUtf8Lenient) $ Import.takeWhile ((>0) . B.length) $ drop 9 (B.split (fromIntegral $ ord '\t') header)
 
 
 parseVcfContent :: Ranges Position0 -> [B.ByteString] -> Either Error [(Range Position0, [Variant])]
@@ -140,9 +133,9 @@ chromosomeParser = choice [autosomeParser, xParser, yParser]
           yParser = string "Y" $> Chromosome "Y"
 
 
-variantIdParser :: Parser (Maybe Text)
+variantIdParser :: Parser (Maybe T.Text)
 variantIdParser = choice [none, rs] <?> "variant_name"
-    where rs = (Just . decodeUtf8With ignore . B.pack) <$> many1 (notWord8 tab)
+    where rs = (Just . decodeUtf8Lenient . B.pack) <$> many1 (notWord8 tab)
           none = word8 dot $> Nothing
 
 dot, tab, newline :: Word8
@@ -167,4 +160,4 @@ variantParser sampleIdentifiers = do
 
 parseVariant :: V.Vector SampleId -> B.ByteString -> Either Error Variant
 parseVariant sampleIdentifiers s = 
-    mapLeft (ParsingError . (\e -> decodeUtf8With ignore s <> " " <> T.pack e)) (parseOnly (variantParser sampleIdentifiers) s) 
+    Import.mapLeft (ParsingError . (\e -> decodeUtf8Lenient s <> " " <> T.pack e)) (parseOnly (variantParser sampleIdentifiers) s) 

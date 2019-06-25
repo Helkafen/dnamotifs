@@ -21,12 +21,13 @@ import           Data.List                      (sort)
 import Types
 import Range
 import PatternFind
-import Lib
+import Run
 import Fasta (takeRef)
 import Vcf (parseVariant, filterOrderedIntervals, parseVcfContent, fillVector)
 import Bed (parseBedContent)
 import MotifDefinition (parseHocomocoMotifsContent)
 import Haplotype (applyVariants, variantsToDiffs)
+import Prelude
 
 mkSeq :: [Nucleotide] -> B.ByteString
 mkSeq = B.pack . map unNuc
@@ -54,7 +55,7 @@ test_patterns_basic = do
   where inputData = V.fromList [BaseSequencePosition inputDataSample0 inputDataPositions]
 
         inputDataPositions :: STO.Vector CInt
-        inputDataPositions = STO.fromList $ map fromIntegral $ take (B.length inputDataSample0) [(0::CInt)..]
+        inputDataPositions = STO.fromList $ take (B.length inputDataSample0) [(0::CInt)..]
 
         patterns = [Pattern 2000 pattern_CG]
 

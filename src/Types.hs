@@ -1,4 +1,4 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, DeriveGeneric #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, DeriveGeneric, FlexibleInstances #-}
 
 module Types (
   Haplotype(..),
@@ -20,6 +20,7 @@ module Types (
 
 import           Data.Text (Text)
 import qualified Data.ByteString as B
+import qualified Data.Text as T
 import qualified Data.Vector as V
 import qualified Data.Vector.Storable as STO
 import           Foreign.C.Types                 (CInt)
@@ -28,6 +29,8 @@ import           Foreign.Storable.Generic
 import           GHC.Generics
 import           TextShow
 import           Control.DeepSeq
+import           Test.QuickCheck
+import           Control.Applicative (liftA2)
 
 data Haplotype = HaploLeft | HaploRight
     deriving (Eq, Ord, Show, Generic)
@@ -54,6 +57,27 @@ data Match a = Match {
     mSampleId :: !a,
     mMatched :: ![Nucleotide]
 } deriving (Eq, Show)
+
+instance Arbitrary Nucleotide where
+  arbitrary = elements [a, c, g, t, n]
+
+instance Arbitrary SampleId where
+  arbitrary = elements [SampleId (T.pack "sample0"), SampleId (T.pack "sample1"), SampleId (T.pack "sample2")]
+
+instance Arbitrary Haplotype where
+  arbitrary = elements [HaploLeft, HaploRight]
+
+instance Arbitrary HaplotypeId where
+  arbitrary = liftA2 HaplotypeId arbitrary arbitrary
+
+instance Arbitrary (Match [HaplotypeId]) where
+  arbitrary = do
+    patId <- elements [0..10]
+    score <- (\x -> x `mod` 5000) <$> arbitrarySizedNatural
+    pos <- (\x -> x `mod` 100) <$> arbitrarySizedNatural
+    sampleId <- listOf1 arbitrary
+    matched <- listOf1 arbitrary
+    return $ Match patId score pos sampleId matched
 
 
 -- They need to keep theses values, because the C function uses them as memory offsets in a table

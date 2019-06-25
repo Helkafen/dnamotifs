@@ -37,6 +37,7 @@ dependencies:
 - transformers
 - mtl
 - filepath
+- QuickCheck
 
 ghc-options:
   - -Wall

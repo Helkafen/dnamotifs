@@ -9,11 +9,14 @@ import qualified Data.Vector.Generic             as G
 import           Data.Monoid                     ((<>))
 import qualified Data.Text                       as T
 import qualified Data.ByteString                 as B
+import qualified Data.Map                        as M
+import qualified Data.Set                        as Set
 import           Foreign.C.Types                 (CInt)
 import           Data.Text.Encoding              (encodeUtf8)
 import qualified Data.Map
 import           Data.Char                       (ord)
 import           Data.Maybe                      (fromJust)
+import           Data.List                      (sort)
 
 import Types
 import Range
@@ -324,6 +327,48 @@ test_processPeak_1 = do
                          Match 2 2000 4 [HaplotypeId (SampleId "sample0") HaploLeft]                                              [t,c],
                          Match 0 2000 6 [HaplotypeId (SampleId "sample0") HaploLeft]                                              [c,g]]
   assertEqual (V.fromList expectedMatches) matches
+
+test_countsInPeak_1 :: IO ()
+test_countsInPeak_1 = do
+  let samples = M.fromList [(0, SampleId "sample0"), (1, SampleId "sample1")]
+  let matches = V.fromList [Match 0 2000 6 [HaplotypeId (SampleId "sample0") HaploLeft] [c,g]]
+  let peak = Range (Position 0) (Position 10)
+  let counted = countsInPeak samples matches peak
+  let expected = [(peak, 0, [Count2 1 0, Count2 0 0])]
+  assertEqual expected counted
+
+
+test_countsInPeak_2 :: IO ()
+test_countsInPeak_2 = do
+  let samples = M.fromList [(0, SampleId "sample0"), (1, SampleId "sample1")]
+  let matches = V.fromList [Match 0 2000 6 [HaplotypeId (SampleId "sample0") HaploLeft] [c,g], Match 1 2000 6 [HaplotypeId (SampleId "sample1") HaploRight] [c,g]]
+  let peak = Range (Position 0) (Position 10)
+  let counted = countsInPeak samples matches peak
+  let expected = [(peak, 0, [Count2 1 0, Count2 0 0]), (peak, 1, [Count2 0 0, Count2 0 1])]
+  assertEqual expected counted
+
+
+-- One line per pattern found in the peak
+prop_countsInPeak_3 :: [Match [HaplotypeId]] -> Bool
+prop_countsInPeak_3 matches =
+  let fixedMatches = map (\m -> m { mSampleId = sort (Set.toList (Set.fromList (mSampleId m))) }) matches
+      samples = M.fromList [(0, SampleId "sample0"), (1, SampleId "sample1")]
+      peak = Range (Position 10) (Position 90)
+      matchesInPeak = filter (inRange peak . Position . mPosition) fixedMatches
+      patternsFoundInPeak = Set.fromList (map mPatternId matchesInPeak)
+  in (Set.size patternsFoundInPeak) == (length $ countsInPeak samples (V.fromList fixedMatches) peak)
+
+-- No Match is lost, and the peak coordinates are provided
+prop_countsInPeak_4 :: [Match [HaplotypeId]] -> Bool
+prop_countsInPeak_4 matches =
+  let fixedMatches = map (\m -> m { mSampleId = sort (Set.toList (Set.fromList (mSampleId m))) }) matches
+      samples = M.fromList [(0, SampleId "sample0"), (1, SampleId "sample1")]
+      peak = Range (Position 10) (Position 90)
+      matchesInPeak = filter (inRange peak . Position . mPosition) fixedMatches
+      counts = countsInPeak samples (V.fromList fixedMatches) peak
+      Count2 l r = mconcat $ map (\(_, _, xs) -> mconcat xs) counts
+      outputPeaks = Set.fromList $ map (\(p, _, _) -> p) counts
+  in r + l == sum (map (length . mSampleId) matchesInPeak) && if (length counts > 0) then outputPeaks == Set.singleton peak else outputPeaks == Set.empty
 
 
 main :: IO ()

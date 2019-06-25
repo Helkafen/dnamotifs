@@ -115,10 +115,14 @@ hToCount HaploLeft = Count2 1 0
 hToCount HaploRight = Count2 0 1
 
 data Count2 = Count2 Int Int
-    deriving (Show)
+    deriving (Eq, Show)
 
 instance Semigroup Count2 where
     (Count2 x y) <> (Count2 z v) = Count2 (x+z) (y+v)
+
+instance Monoid Count2 where
+    mempty = Count2 0 0
+    mappend = (<>)
 
 reportAsByteString :: Chromosome -> T.Text -> [(Range Position0, Int, [Count2])] -> B.ByteString
 reportAsByteString (Chromosome chr) filename xs = TE.encodeUtf8 $ T.concat $ map formatLine xs

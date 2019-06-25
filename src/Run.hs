@@ -16,7 +16,7 @@ import           Pipes (Producer, yield, (>->), runEffect)
 import           Pipes.GZip (compress, defaultCompression)
 import qualified Pipes.ByteString as PBS
 import           System.IO (IOMode(..))
-
+import           Text.Printf (printf)
 
 import Types
 import Range
@@ -40,6 +40,7 @@ findPatterns chr patterns peakFiles referenceGenomeFile vcfFile resultFile = do
     Import.withFile resultFile WriteMode $ \fh -> do
         let header = "chromosome\tsource\tpeakStart\tpeakStop\tpatternId\tsampleId\tmatchCount\t" <> TE.encodeUtf8 (T.intercalate "\t" (map (\(SampleId s) -> s) sampleIdList))  <> "\n"
         runEffect $ compress defaultCompression (yield header >> processPeaks t0 chr patterns takeReferenceGenome peaksByFile samples (zip [1..] variants)) >-> PBS.toHandle fh
+        logSticky ""
     return True
 
 processPeaks :: HasLogFunc env => UTCTime
@@ -61,18 +62,35 @@ processPeaks t0 chr patterns takeReferenceGenome peaksByFile samples xs@((peakId
     t2 <- getCurrentTime
     when (B.length bs == (-1)) (logWarn "No match for this peak")
     logInfo $ display $ formatStatus t0 t1 t2 peakId (length xs + peakId) numberOfHaplotypes numberOfVariants numberOfMatches
+    logSticky $ display $ formatStatusBar t0 t2 peakId (length xs + peakId)
     processPeaks t0 chr patterns takeReferenceGenome peaksByFile samples nextVariants
 
 formatStatus :: UTCTime -> UTCTime -> UTCTime -> Int -> Int -> Int -> Int -> Int -> T.Text
 formatStatus t0 t1 t2 peakId totalPeakNumber numberOfHaplotypes numberOfVariants numberOfMatches =
     T.pack $ intercalate " \t" [peakNumberString, timeString, haploString, variantsString, matchesString]
-    where peakTime  = round $ (toRational $ diffUTCTime t2 t1) * 1000000000 :: Integer
-          totalTime = round $ (toRational $ diffUTCTime t2 t0) * 1000000000 :: Integer
+    where peakTime  = round $ (toRational $ diffUTCTime t2 t1) * 1000 :: Integer
+          totalTime = round $ (toRational $ diffUTCTime t2 t0) * 1000 :: Integer
           peakNumberString = "Peak " <> show peakId <> "/" <> show totalPeakNumber
           timeString = show peakTime <> " ms (" <> show totalTime <> " total)"
           haploString = show numberOfHaplotypes <> " haplotypes"
           variantsString = show numberOfVariants <> " variants"
           matchesString = show numberOfMatches <> " matches"
+
+formatStatusBar :: UTCTime -> UTCTime -> Int -> Int -> T.Text
+formatStatusBar t0 t2 peakId totalPeakNumber = progressText <> remainingTimeText
+    where
+        totalTime = (fromRational $ toRational $ diffUTCTime t2 t0)
+        progressPercentage = (fromIntegral peakId / (fromIntegral totalPeakNumber :: Double))
+        progressText = T.pack $ printf "Progress: %.3f%%. " (100 * progressPercentage)
+        remainingTime = round $ (totalTime / progressPercentage) - totalTime
+        remainingDays = remainingTime `div` (3600 * 24) :: Integer
+        remainingHours = (remainingTime - (remainingDays * 3600 * 24)) `div` 3600
+        remainingMinutes = (remainingTime - (remainingDays * 3600 * 24) - (remainingHours * 3600)) `div` 60
+        remainingSeconds = (remainingTime - (remainingDays * 3600 * 24) - (remainingHours * 3600) - (remainingMinutes * 60))
+        remainingTimeText =
+            T.pack $ if (remainingDays > 0)
+                        then printf "Time to completion: %.1d-%.2d:%.2d:%.2d" remainingDays remainingHours remainingMinutes remainingSeconds
+                        else printf "Time to completion: %.2d:%.2d:%.2d" remainingHours remainingMinutes remainingSeconds
 
 processPeak :: Patterns
             -> (Range Position0 -> BaseSequencePosition)

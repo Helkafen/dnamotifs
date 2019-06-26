@@ -3,7 +3,6 @@ module Main where
 
 import qualified Data.Text                       as T
 import qualified Data.Map                        as M
-import           System.Environment              (getArgs)
 import           Data.List                       (elem)
 import           Data.Maybe                      (mapMaybe)
 import           Types
@@ -12,6 +11,7 @@ import           Run                             (findPatterns)
 import           MotifDefinition                 (loadHocomocoMotifs)
 import           Data.List.Split                 (splitOn)
 import           RIO.Prelude.Simple              (runSimpleApp)
+import           Options.Applicative
 
 
 import Import
@@ -108,13 +108,30 @@ loadHocomocoPatternsAndScoreThresholds pwmFile thresholdsFile wantedHocomocoPatt
          lastColumn :: T.Text -> Double
          lastColumn = read . T.unpack . T.reverse . T.takeWhile (/='\t') . T.reverse
    
+data Config = Config
+  { cfgChromosome        :: String
+  , cfgReferenceGenome   :: String
+  , cfgBedFiles          :: String
+  , cfgInputVCF          :: String
+  , cfgOutput            :: String
+  , cfgHomocomo          :: String
+  , cfgHomocomoThreshold :: String
+  }
+
+config :: Parser Config
+config = Config
+       <$> strOption (long "chromosome"          <> short 'c'  <> metavar "CHR"                 <> help "Ex: 1")
+       <*> strOption (long "ref-genome"          <> short 'r'  <> metavar "FASTA"               <> help "Ex: hg38.fa")
+       <*> strOption (long "bed-files"           <> short 'b'  <> metavar "BED"                 <> help "Ex: GATA1.bed,GATA2.bed")
+       <*> strOption (long "vcf"                 <> short 'i'  <> metavar "VCF"                 <> help "Ex: chr1.vcf.gz")
+       <*> strOption (long "output-file"         <> short 'o'  <> metavar "OUTPUT"              <> help "Ex: output.tab.gz")
+       <*> strOption (long "hocomoco-file"       <> short 'h'  <> metavar "HOCOMOCO"            <> help "Ex: HOCOMOCOv11_core_pcms_HUMAN_mono.txt")
+       <*> strOption (long "hocomoco-thresholds" <> short 't'  <> metavar "HOCOMOCO_THRESHOLD"  <> help "Ex: hocomoco_thresholds.tab")
 
 main :: IO()
-main = do
-    args <- getArgs
-
-    runSimpleApp $ case args of
-      [] -> do
+main = runSimpleApp $ do
+        let p = prefs (disambiguate <> showHelpOnEmpty <> columns 100)
+        cfg <- liftIO $ customExecParser p (info (config <**> helper) ( fullDesc <> progDesc "DNAMotif finds PWM motifs in a VCF files" ))
         -- From http://schemer.buenrostrolab.com :
         --JUNB SMARCC1 FOSL2 FOSL1 JUND GATA1 JUN                  GATA2 FOS    BATF GATA3 BACH1 ATF3 BACH2 FOSB BCL11A BCL11B JDP2 GATA5 NFE2  SPI1D GATA4 CEBPB CEBPA SPIB IRF8      SPI1 CEBPD
         --x            Fosl2       JunD Gata1 Jun-AP1 or c-Jun-CRE Gata2 Fosl2? BATF Gata3 Bach1 Atf3 Bach2                               NF-E2       Gata4 CEBP        SpiB PU.1:IRF8           
@@ -127,17 +144,10 @@ main = do
         --gata1 <- (map snd . filter ((== "GATA1_HUMAN.H11MO.0.A") . fst)) <$> loadHocomocoMotifs "HOCOMOCOv11_core_pwms_HUMAN_mono.txt"
         --putStrLn "GATA1 motif:"
         --mapM_ (mapM_ print) gata1
-        patterns <- loadHocomocoPatternsAndScoreThresholds "HOCOMOCOv11_core_pwms_HUMAN_mono.txt" "hocomoco_thresholds.tab" ["GATA1_HUMAN.H11MO.0.A"]
-        success <- findPatterns (Chromosome "1") patterns ["chr1.bed"] "hg38.fa" "chr1.vcf.gz" "resultFile.tab.gz"
-        if success
-          then logInfo "Success"
-          else logError "Error"
-      [chrom, peakBedFiles, referenceGenomeFastaFile, vcfFile, motifsFile, score_thresholdsFile, outputFile] -> do
         let wantedHocomocoPatterns = mapMaybe tfHocomocoId knownPatterns :: [T.Text]
-        patterns <- loadHocomocoPatternsAndScoreThresholds motifsFile score_thresholdsFile wantedHocomocoPatterns
-        success <- findPatterns (Chromosome $ T.pack chrom) patterns (splitOn "," peakBedFiles) referenceGenomeFastaFile vcfFile outputFile
+        patterns <- loadHocomocoPatternsAndScoreThresholds (cfgHomocomo cfg) (cfgHomocomoThreshold cfg) wantedHocomocoPatterns
+        success <- findPatterns (Chromosome $ T.pack (cfgChromosome cfg)) patterns (splitOn "," (cfgBedFiles cfg)) (cfgReferenceGenome cfg) (cfgInputVCF cfg) (cfgOutput cfg)
         if success
           then logInfo "Success"
           else logError "Error"
-      _ -> logError "Usage: xxx"
       

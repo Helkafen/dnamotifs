@@ -39,6 +39,7 @@ dependencies:
 - filepath
 - QuickCheck
 - rio
+- optparse-applicative
 
 default-extensions: NoImplicitPrelude
 

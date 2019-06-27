@@ -11,7 +11,8 @@ import qualified Data.ByteString as B
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import           TextShow (showt)
-import           RIO.List (iterate, intercalate)
+import           RIO.List (iterate, intercalate, sortBy)
+import qualified RIO.List.Partial as LP
 import           Pipes (Producer, yield, (>->), runEffect)
 import           Pipes.GZip (compress, defaultCompression)
 import qualified Pipes.ByteString as PBS
@@ -56,7 +57,7 @@ processPeaks t0 chr patterns takeReferenceGenome peaksByFile samples xs@((peakId
     t1 <- getCurrentTime
     let (matches, numberOfHaplotypes, numberOfVariants, numberOfMatches) = processPeak patterns takeReferenceGenome samples variants
     let rangesInThisPeak = M.map (overlaps peak . getRanges) peaksByFile :: M.Map T.Text [Range Position0]
-    let report = M.elems $ M.mapWithKey (\file ranges -> reportAsByteString chr file (countsInPeaks samples matches ranges)) rangesInThisPeak :: [B.ByteString]
+    let report = M.elems $ M.mapWithKey (\file ranges -> reportAsByteString chr file (map (\(pea, patId, counts) -> (pea, patId, encodeNumberOfMatches (map countTotal counts))) (countsInPeaks samples matches ranges))) rangesInThisPeak :: [B.ByteString]
     let !bs = B.concat report
     yield bs
     t2 <- getCurrentTime
@@ -68,8 +69,8 @@ processPeaks t0 chr patterns takeReferenceGenome peaksByFile samples xs@((peakId
 formatStatus :: UTCTime -> UTCTime -> UTCTime -> Int -> Int -> Int -> Int -> Int -> T.Text
 formatStatus t0 t1 t2 peakId totalPeakNumber numberOfHaplotypes numberOfVariants numberOfMatches =
     T.pack $ intercalate " \t" [peakNumberString, timeString, haploString, variantsString, matchesString]
-    where peakTime  = round $ (toRational $ diffUTCTime t2 t1) * 1000 :: Integer
-          totalTime = round $ (toRational $ diffUTCTime t2 t0) * 1000 :: Integer
+    where peakTime  = round $ toRational (diffUTCTime t2 t1) * 1000 :: Integer
+          totalTime = round $ toRational (diffUTCTime t2 t0) * 1000 :: Integer
           peakNumberString = "Peak " <> show peakId <> "/" <> show totalPeakNumber
           timeString = show peakTime <> " ms (" <> show totalTime <> " total)"
           haploString = show numberOfHaplotypes <> " haplotypes"
@@ -79,16 +80,16 @@ formatStatus t0 t1 t2 peakId totalPeakNumber numberOfHaplotypes numberOfVariants
 formatStatusBar :: UTCTime -> UTCTime -> Int -> Int -> T.Text
 formatStatusBar t0 t2 peakId totalPeakNumber = progressText <> remainingTimeText
     where
-        totalTime = (fromRational $ toRational $ diffUTCTime t2 t0)
-        progressPercentage = (fromIntegral peakId / (fromIntegral totalPeakNumber :: Double))
+        totalTime = fromRational $ toRational (diffUTCTime t2 t0)
+        progressPercentage = fromIntegral peakId / (fromIntegral totalPeakNumber :: Double)
         progressText = T.pack $ printf "Progress: %.3f%%. " (100 * progressPercentage)
         remainingTime = round $ (totalTime / progressPercentage) - totalTime
         remainingDays = remainingTime `div` (3600 * 24) :: Integer
         remainingHours = (remainingTime - (remainingDays * 3600 * 24)) `div` 3600
         remainingMinutes = (remainingTime - (remainingDays * 3600 * 24) - (remainingHours * 3600)) `div` 60
-        remainingSeconds = (remainingTime - (remainingDays * 3600 * 24) - (remainingHours * 3600) - (remainingMinutes * 60))
+        remainingSeconds = remainingTime - (remainingDays * 3600 * 24) - (remainingHours * 3600) - (remainingMinutes * 60)
         remainingTimeText =
-            T.pack $ if (remainingDays > 0)
+            T.pack $ if remainingDays > 0
                         then printf "Time to completion: %.1d-%.2d:%.2d:%.2d" remainingDays remainingHours remainingMinutes remainingSeconds
                         else printf "Time to completion: %.2d:%.2d:%.2d" remainingHours remainingMinutes remainingSeconds
 
@@ -103,19 +104,43 @@ processPeak patterns takeReferenceGenome samples (peak, variants) = do
     let matchesWithSampleIds = V.map (\(Match patId score pos sampleId matched) -> Match patId score pos (snd $ haplotypes V.! sampleId) matched) matches :: V.Vector (Match [HaplotypeId])
     (matchesWithSampleIds, length haplotypes, length variants, V.sum (V.map (length . mSampleId) matchesWithSampleIds))
 
+countTotal :: Count2 -> Int
+countTotal (Count2 l r) = l + r
 
+encodeNumberOfMatches :: [Int] -> [Genotype]
+encodeNumberOfMatches [] = []
+encodeNumberOfMatches matchNumbers = case map fst (sortBy (comparing snd) (count matchNumbers)) of
+    []  -> []
+    [_] -> replicate (length matchNumbers) geno00
+    [x, y] -> map (\w -> if w == min x y then geno00 else geno11) matchNumbers
+    [x, y, z] -> let lowest = min (min x y) z
+                     highest = max (max x y) z
+                 in map (\w -> if w == lowest then geno00 else if w == highest then geno11 else geno01) matchNumbers
+    xs -> let lowest = LP.minimum xs
+              intermediate = (highest + lowest) `div` 2
+              highest = LP.maximum xs
+              closest x
+                | x - lowest < intermediate - x = geno00
+                | highest - x < x - intermediate = geno11
+                | otherwise = geno01
+          in map (\w -> if w == lowest then geno00 else if w == highest then geno11 else closest w) matchNumbers
+  where
+    count :: Ord a => [a] -> [(a, Int)]
+    count [] = []
+    count (x:xs) = let (same, rest) = span (==x) xs
+                   in (x,1+length same):count rest
 
 
 countsInPeaks :: M.Map Int SampleId -> V.Vector (Match [HaplotypeId]) -> [Range Position0] -> [(Range Position0, Int, [Count2])]
-countsInPeaks samples matches peaks = concatMap (countsInPeak samples matches) peaks
+countsInPeaks samples matches = concatMap (countsInPeak samples matches)
 
 countsInPeak :: M.Map Int SampleId -> V.Vector (Match [HaplotypeId]) -> Range Position0 -> [(Range Position0, Int, [Count2])]
-countsInPeak samples matches peak = map (\((patternId),counts) -> (peak, patternId, counts)) (M.assocs byPatternId)
+countsInPeak samples matches peak = map (\(patternId,counts) -> (peak, patternId, counts)) (M.assocs byPatternId)
     where byPatternId = M.fromListWith (<>) $ V.toList $ V.map (\(Match patternId _ _ haplotypeIds _) -> (patternId, toCounts haplotypeIds)) inPeak :: M.Map Int [Count2]
           inPeak = V.filter (inRange peak . Position . mPosition) matches
           toCounts :: [HaplotypeId] -> [Count2]
           toCounts haplotypeIds = M.elems abc
-            where abc = M.fromListWith (<>) (map (\(HaplotypeId s h) -> (s, hToCount h)) haplotypeIds) `M.union` (M.fromList (map (,Count2 0 0) (M.elems samples))) :: M.Map SampleId Count2
+            where abc = M.fromListWith (<>) (map (\(HaplotypeId s h) -> (s, hToCount h)) haplotypeIds) `M.union` M.fromList (map (,Count2 0 0) (M.elems samples)) :: M.Map SampleId Count2
 
 hToCount :: Haplotype -> Count2
 hToCount HaploLeft = Count2 1 0
@@ -131,8 +156,7 @@ instance Monoid Count2 where
     mempty = Count2 0 0
     mappend = (<>)
 
-reportAsByteString :: Chromosome -> T.Text -> [(Range Position0, Int, [Count2])] -> B.ByteString
+reportAsByteString :: Chromosome -> T.Text -> [(Range Position0, Int, [Genotype])] -> B.ByteString
 reportAsByteString (Chromosome chr) filename xs = TE.encodeUtf8 $ T.concat $ map formatLine xs
-    where formatLine ((Range s e, patternId, counts)) = (T.intercalate "\t" [chr, filename, showt s, showt e, showt patternId, countsStr counts]) <> "\n"
-          formatCount (Count2 c1 c2) = showt c1 <> "|" <> showt c2
-          countsStr counts = T.intercalate "\t" (map formatCount counts) :: T.Text
+    where formatLine (Range s e, patternId, counts) = T.intercalate "\t" [chr, filename, showt s, showt e, showt patternId, countsStr counts] <> "\n"
+          countsStr counts = T.intercalate "\t" (map showt counts) :: T.Text

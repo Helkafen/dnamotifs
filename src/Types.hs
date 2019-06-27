@@ -1,4 +1,4 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, DeriveGeneric, FlexibleInstances #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, DeriveGeneric, FlexibleInstances, OverloadedStrings #-}
 
 module Types (
   Haplotype(..),
@@ -74,8 +74,8 @@ instance Arbitrary HaplotypeId where
 instance Arbitrary (Match [HaplotypeId]) where
   arbitrary = do
     patId <- elements [0..10]
-    score <- (\x -> x `mod` 5000) <$> arbitrarySizedNatural
-    pos <- (\x -> x `mod` 100) <$> arbitrarySizedNatural
+    score <- (`mod` 5000) <$> arbitrarySizedNatural
+    pos <- (`mod` 100) <$> arbitrarySizedNatural
     sampleId <- listOf1 arbitrary
     matched <- listOf1 arbitrary
     return $ Match patId score pos sampleId matched
@@ -88,12 +88,12 @@ newtype Nucleotide = Nucleotide { unNuc :: Word8 }
 instance GStorable Nucleotide
 
 instance TextShow Nucleotide where
-  showb (Nucleotide 0) = showb ("N")
-  showb (Nucleotide 1) = showb ("A")
-  showb (Nucleotide 2) = showb ("C")
-  showb (Nucleotide 3) = showb ("G")
-  showb (Nucleotide 4) = showb ("T")
-  showb (Nucleotide _) = showb ("_")
+  showb (Nucleotide 0) = showb ("N" :: T.Text)
+  showb (Nucleotide 1) = showb ("A" :: T.Text)
+  showb (Nucleotide 2) = showb ("C" :: T.Text)
+  showb (Nucleotide 3) = showb ("G" :: T.Text)
+  showb (Nucleotide 4) = showb ("T" :: T.Text)
+  showb (Nucleotide _) = showb ("_" :: T.Text)
 
 n, a, c, g, t :: Nucleotide
 n = Nucleotide 0
@@ -126,7 +126,7 @@ toNuc 110 = n
 toNuc other = error $ "Bad nucleotide " <> show other
 
 newtype Genotype = Genotype Word8
-    deriving (Eq, Show, Generic)
+    deriving (Eq, Ord, Generic)
 
 instance GStorable Genotype
 
@@ -135,6 +135,21 @@ geno00 = Genotype 10
 geno01 = Genotype 11
 geno10 = Genotype 12
 geno11 = Genotype 13
+
+instance Show Genotype where
+  show x@(Genotype ge)
+    | x == geno00 = "geno00"
+    | x == geno01 = "geno01"
+    | x == geno10 = "geno10"
+    | x == geno11 = "geno11"
+    | otherwise = error "bad genotype " <> show ge
+
+instance TextShow Genotype where
+  showb (Genotype 10) = showb ("0|0" :: T.Text)
+  showb (Genotype 11) = showb ("0|1" :: T.Text)
+  showb (Genotype 12) = showb ("1|0" :: T.Text)
+  showb (Genotype 13) = showb ("1|1" :: T.Text)
+  showb (Genotype _) = error "Bad genotype"
 
 type BaseSequence = B.ByteString
 

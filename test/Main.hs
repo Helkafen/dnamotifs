@@ -16,7 +16,7 @@ import           Data.Text.Encoding              (encodeUtf8)
 import qualified Data.Map
 import           Data.Char                       (ord)
 import           Data.Maybe                      (fromJust)
-import           Data.List                      (sort)
+import           Data.List                       (sort)
 
 import Types
 import Range
@@ -28,6 +28,7 @@ import Bed (parseBedContent)
 import MotifDefinition (parseHocomocoMotifsContent)
 import Haplotype (applyVariants, variantsToDiffs)
 import Prelude
+import Debug.Trace (traceShow)
 
 mkSeq :: [Nucleotide] -> B.ByteString
 mkSeq = B.pack . map unNuc
@@ -50,7 +51,7 @@ pattern_cccccccccc = [cPattern, cPattern, cPattern, cPattern, cPattern, cPattern
   where cPattern = Pweight 0 0 1 0
 
 test_patterns_basic :: IO ()
-test_patterns_basic = do
+test_patterns_basic = 
     assertEqual expected (findPatternsInBlock (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns))
   where inputData = V.fromList [BaseSequencePosition inputDataSample0 inputDataPositions]
         inputDataPositions :: STO.Vector CInt
@@ -59,7 +60,7 @@ test_patterns_basic = do
         expected = V.fromList [Match {mPatternId = 0,  mScore = 2000, mPosition = 4, mSampleId = 0, mMatched = [c,g]}]
 
 test_patterns_basic2 :: IO ()
-test_patterns_basic2 = do
+test_patterns_basic2 = 
     assertEqual expected (findPatternsInBlock (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns))
   where inputData = V.fromList [BaseSequencePosition inputDataSample0 inputDataPositions]
         inputDataPositions = STO.fromList $ take (B.length inputDataSample0) [(0::CInt)..]
@@ -71,7 +72,7 @@ test_patterns_basic2 = do
 
 
 test_patterns_1 :: IO ()
-test_patterns_1 = do
+test_patterns_1 = 
     assertEqual (V.fromList  expected) (findPatternsInBlock (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns))
   where numberOfPeople = 1000 :: Int
 
@@ -90,7 +91,7 @@ test_patterns_1 = do
 
 -- Check that the Matches contain the reference position, not the real position
 test_patterns_2 :: IO ()
-test_patterns_2 = do
+test_patterns_2 = 
     assertEqual (V.fromList  expected) (findPatternsInBlock (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns))
   where numberOfPeople = 1000 :: Int
 
@@ -109,7 +110,7 @@ test_patterns_2 = do
 
 -- Check that the end of the chromosome is padded with N
 test_patterns_padding :: IO ()
-test_patterns_padding = do
+test_patterns_padding = 
     assertEqual (V.fromList  expected) (findPatternsInBlock (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns))
   where numberOfPeople = 1000 :: Int
 
@@ -298,7 +299,7 @@ test_variantsToDiffs_2 = do
 test_processPeak_1 :: IO()
 test_processPeak_1 = do
   let chr = Chromosome "1"
-  let pattern_CCCG = Pattern 4000 ((replicate 3 (Pweight 0 1000 0 0)) ++ [Pweight 0 0 1000 0])
+  let pattern_CCCG = Pattern 4000 (replicate 3 (Pweight 0 1000 0 0) ++ [Pweight 0 0 1000 0])
   let patterns = mkPatterns [Pattern 2000 pattern_CG, Pattern 2000 pattern_AT, Pattern 2000 pattern_TC, pattern_CCCG]
   let ref = takeRef (B.pack (map (fromIntegral . ord) "AAAACCCGGGTTT"))
   --                                                       T            -- Sample 0, haplotype Left
@@ -354,7 +355,7 @@ prop_countsInPeak_3 matches =
       peak = Range (Position 10) (Position 90)
       matchesInPeak = filter (inRange peak . Position . mPosition) fixedMatches
       patternsFoundInPeak = Set.fromList (map mPatternId matchesInPeak)
-  in (Set.size patternsFoundInPeak) == (length $ countsInPeak samples (V.fromList fixedMatches) peak)
+  in Set.size patternsFoundInPeak == length (countsInPeak samples (V.fromList fixedMatches) peak)
 
 -- No Match is lost, and the peak coordinates are provided
 prop_countsInPeak_4 :: [Match [HaplotypeId]] -> Bool
@@ -366,9 +367,41 @@ prop_countsInPeak_4 matches =
       counts = countsInPeak samples (V.fromList fixedMatches) peak
       Count2 l r = mconcat $ map (\(_, _, xs) -> mconcat xs) counts
       outputPeaks = Set.fromList $ map (\(p, _, _) -> p) counts
-  in r + l == sum (map (length . mSampleId) matchesInPeak) && if (length counts > 0) then outputPeaks == Set.singleton peak else outputPeaks == Set.empty
+  in r + l == sum (map (length . mSampleId) matchesInPeak) && if not (null counts) then outputPeaks == Set.singleton peak else outputPeaks == Set.empty
 
+
+test_encodeNumberOfMatches_1 :: IO ()
+test_encodeNumberOfMatches_1 = assertEqual [geno00] (encodeNumberOfMatches [3])
+
+test_encodeNumberOfMatches_2 :: IO ()
+test_encodeNumberOfMatches_2 = assertEqual [] (encodeNumberOfMatches [])
+
+test_encodeNumberOfMatches_3 :: IO ()
+test_encodeNumberOfMatches_3 = assertEqual [geno00, geno00, geno00] (encodeNumberOfMatches [3, 3, 3])
+
+test_encodeNumberOfMatches_4 :: IO ()
+test_encodeNumberOfMatches_4 = assertEqual [geno00, geno11, geno00] (encodeNumberOfMatches [3, 4, 3])
+
+test_encodeNumberOfMatches_5 :: IO ()
+test_encodeNumberOfMatches_5 = assertEqual [geno00, geno01, geno00, geno11, geno00, geno01] (encodeNumberOfMatches [3, 4, 3, 5, 3, 4])
+
+test_encodeNumberOfMatches_6 :: IO ()
+test_encodeNumberOfMatches_6 = assertEqual [geno00, geno00, geno01, geno01, geno11, geno11] (encodeNumberOfMatches [2, 3, 6, 7, 9, 10])
+
+test_encodeNumberOfMatches_7 :: IO ()
+test_encodeNumberOfMatches_7 = assertEqual [geno00, geno11] (encodeNumberOfMatches [3, 4])
+
+test_encodeNumberOfMatches_8 :: IO ()
+test_encodeNumberOfMatches_8 = assertEqual [geno00, geno00, geno01, geno11, geno11] (encodeNumberOfMatches [0,0,3,5,6])
+
+prop_encodeNumberOfMatches_1 :: [Int] -> Bool
+prop_encodeNumberOfMatches_1 xs = encodeNumberOfMatches (sort positiveXs) == sort (encodeNumberOfMatches positiveXs)
+    where positive [] = []
+          positive vs = map (+ abs (minimum vs)) vs
+          positiveXs = positive xs
 
 main :: IO ()
+
+
 main =
   htfMainWithArgs ["--quiet"] htf_thisModulesTests

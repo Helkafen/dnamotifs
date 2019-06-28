@@ -13,7 +13,8 @@ import qualified Data.ByteString as B
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import           TextShow (showt)
-import           RIO.List (iterate, intercalate, sortBy)
+import qualified RIO.Set as Set
+import           RIO.List (iterate, intercalate)
 import qualified RIO.List.Partial as LP
 import           Pipes (Producer, yield, (>->), runEffect)
 import           Pipes.GZip (compress, defaultCompression)
@@ -42,7 +43,11 @@ findPatterns chr patterns peakFiles referenceGenomeFile vcfFile resultFile = do
     let samples = M.fromList (zip (iterate (+1) 0) sampleIdList)
     t0 <- getCurrentTime
     Import.withFile resultFile WriteMode $ \fh -> do
+<<<<<<< HEAD
         let header = "chromosome\tsource\tpeakStart\tpeakStop\tpatternId\tsampleId\tmatchCount\t" <> TE.encodeUtf8 (T.intercalate "\t" (map (\(SampleId s _) -> s) sampleIdList))  <> "\n"
+=======
+        let header = "chromosome\tsource\tpeakStart\tpeakStop\tpatternId\tsampleId\tdistinctMatchCounts\t" <> TE.encodeUtf8 (T.intercalate "\t" (map (\(SampleId s) -> s) sampleIdList))  <> "\n"
+>>>>>>> add column distinctMatchCounts
         runEffect $ compress defaultCompression (yield header >> processPeaks t0 chr patterns takeReferenceGenome peaksByFile samples (zip [1..] variants)) >-> PBS.toHandle fh
         logSticky ""
     return True
@@ -127,6 +132,7 @@ processPeak patterns takeReferenceGenome samples (peak, variants) = do
     (matchesWithSampleIds, length haplotypes, length variants, V.sum (V.map (length . mSampleId) matchesWithSampleIds))
 
 
+<<<<<<< HEAD
 encodeNumberOfMatches :: [Int] -> [Genotype]
 encodeNumberOfMatches matchNumbers = case map fst (sortBy (comparing snd) (count matchNumbers)) of
     []  -> []
@@ -148,3 +154,56 @@ encodeNumberOfMatches matchNumbers = case map fst (sortBy (comparing snd) (count
     count [] = []
     count (x:xs) = let (same, rest) = span (==x) xs
                    in (x,1+length same):count rest
+=======
+
+encodeNumberOfMatches :: [Int] -> ([Genotype], Set.Set Int)
+encodeNumberOfMatches matchNumbers = (replaceByGenotypes (Set.toList distinctCounts), distinctCounts)
+  where
+    distinctCounts = Set.fromList matchNumbers
+    replaceByGenotypes [] = []
+    replaceByGenotypes [_] = replicate (length matchNumbers) geno00
+    replaceByGenotypes [x, y] = map (\w -> if w == min x y then geno00 else geno11) matchNumbers
+    replaceByGenotypes [x, y, z] = let lowest = min (min x y) z
+                                       highest = max (max x y) z
+                                   in map (\w -> if w == lowest then geno00 else if w == highest then geno11 else geno01) matchNumbers
+    replaceByGenotypes xs = let lowest = LP.minimum xs
+                                intermediate = (highest + lowest) `div` 2
+                                highest = LP.maximum xs
+                                closest x
+                                    | x - lowest < intermediate - x = geno00
+                                    | highest - x < x - intermediate = geno11
+                                    | otherwise = geno01
+                            in map (\w -> if w == lowest then geno00 else if w == highest then geno11 else closest w) matchNumbers
+
+
+countsInPeaks :: M.Map Int SampleId -> V.Vector (Match [HaplotypeId]) -> [Range Position0] -> [(Range Position0, Int, [Count2])]
+countsInPeaks samples matches = concatMap (countsInPeak samples matches)
+
+countsInPeak :: M.Map Int SampleId -> V.Vector (Match [HaplotypeId]) -> Range Position0 -> [(Range Position0, Int, [Count2])]
+countsInPeak samples matches peak = map (\(patternId,counts) -> (peak, patternId, counts)) (M.assocs byPatternId)
+    where byPatternId = M.fromListWith (<>) $ V.toList $ V.map (\(Match patternId _ _ haplotypeIds _) -> (patternId, toCounts haplotypeIds)) inPeak :: M.Map Int [Count2]
+          inPeak = V.filter (inRange peak . Position . mPosition) matches
+          toCounts :: [HaplotypeId] -> [Count2]
+          toCounts haplotypeIds = M.elems abc
+            where abc = M.fromListWith (<>) (map (\(HaplotypeId s h) -> (s, hToCount h)) haplotypeIds) `M.union` M.fromList (map (,Count2 0 0) (M.elems samples)) :: M.Map SampleId Count2
+
+hToCount :: Haplotype -> Count2
+hToCount HaploLeft = Count2 1 0
+hToCount HaploRight = Count2 0 1
+
+data Count2 = Count2 Int Int
+    deriving (Eq, Show)
+
+instance Semigroup Count2 where
+    (Count2 x y) <> (Count2 z v) = Count2 (x+z) (y+v)
+
+instance Monoid Count2 where
+    mempty = Count2 0 0
+    mappend = (<>)
+
+reportAsByteString :: Chromosome -> T.Text -> [(Range Position0, Int, ([Genotype], Set.Set Int))] -> B.ByteString
+reportAsByteString (Chromosome chr) filename xs = TE.encodeUtf8 $ T.concat $ map formatLine xs
+    where formatLine (Range s e, patternId, (counts, countSet)) = T.intercalate "\t" [chr, filename, showt s, showt e, showt patternId, countSetStr countSet, countsStr counts] <> "\n"
+          countsStr counts = T.intercalate "\t" (map showt counts) :: T.Text
+          countSetStr countSet = T.intercalate "\t" (map showt (Set.toList countSet)) :: T.Text
+>>>>>>> add column distinctMatchCounts

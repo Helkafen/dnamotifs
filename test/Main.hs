@@ -51,7 +51,7 @@ pattern_cccccccccc = [cPattern, cPattern, cPattern, cPattern, cPattern, cPattern
   where cPattern = Pweight 0 0 1 0
 
 test_patterns_basic :: IO ()
-test_patterns_basic = 
+test_patterns_basic =
     assertEqual expected (findPatternsInBlock (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns))
   where inputData = V.fromList [BaseSequencePosition inputDataSample0 inputDataPositions]
         inputDataPositions :: STO.Vector CInt
@@ -60,7 +60,7 @@ test_patterns_basic =
         expected = V.fromList [Match {mPatternId = 0,  mScore = 2000, mPosition = 4, mSampleId = 0, mMatched = [c,g]}]
 
 test_patterns_basic2 :: IO ()
-test_patterns_basic2 = 
+test_patterns_basic2 =
     assertEqual expected (findPatternsInBlock (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns))
   where inputData = V.fromList [BaseSequencePosition inputDataSample0 inputDataPositions]
         inputDataPositions = STO.fromList $ take (B.length inputDataSample0) [(0::CInt)..]
@@ -72,7 +72,7 @@ test_patterns_basic2 =
 
 
 test_patterns_1 :: IO ()
-test_patterns_1 = 
+test_patterns_1 =
     assertEqual (V.fromList  expected) (findPatternsInBlock (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns))
   where numberOfPeople = 1000 :: Int
 
@@ -91,7 +91,7 @@ test_patterns_1 =
 
 -- Check that the Matches contain the reference position, not the real position
 test_patterns_2 :: IO ()
-test_patterns_2 = 
+test_patterns_2 =
     assertEqual (V.fromList  expected) (findPatternsInBlock (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns))
   where numberOfPeople = 1000 :: Int
 
@@ -110,7 +110,7 @@ test_patterns_2 =
 
 -- Check that the end of the chromosome is padded with N
 test_patterns_padding :: IO ()
-test_patterns_padding = 
+test_patterns_padding =
     assertEqual (V.fromList  expected) (findPatternsInBlock (mkNucleotideAndPositionBlock inputData) (mkPatterns patterns))
   where numberOfPeople = 1000 :: Int
 
@@ -371,31 +371,37 @@ prop_countsInPeak_4 matches =
 
 
 test_encodeNumberOfMatches_1 :: IO ()
-test_encodeNumberOfMatches_1 = assertEqual [geno00] (encodeNumberOfMatches [3])
+test_encodeNumberOfMatches_1 = assertEqual [geno00] (fst (encodeNumberOfMatches [3]))
 
 test_encodeNumberOfMatches_2 :: IO ()
-test_encodeNumberOfMatches_2 = assertEqual [] (encodeNumberOfMatches [])
+test_encodeNumberOfMatches_2 = assertEqual [] (fst (encodeNumberOfMatches []))
 
 test_encodeNumberOfMatches_3 :: IO ()
-test_encodeNumberOfMatches_3 = assertEqual [geno00, geno00, geno00] (encodeNumberOfMatches [3, 3, 3])
+test_encodeNumberOfMatches_3 = assertEqual [geno00, geno00, geno00] (fst (encodeNumberOfMatches [3, 3, 3]))
 
 test_encodeNumberOfMatches_4 :: IO ()
-test_encodeNumberOfMatches_4 = assertEqual [geno00, geno11, geno00] (encodeNumberOfMatches [3, 4, 3])
+test_encodeNumberOfMatches_4 = assertEqual [geno00, geno11, geno00] (fst (encodeNumberOfMatches [3, 4, 3]))
 
 test_encodeNumberOfMatches_5 :: IO ()
-test_encodeNumberOfMatches_5 = assertEqual [geno00, geno01, geno00, geno11, geno00, geno01] (encodeNumberOfMatches [3, 4, 3, 5, 3, 4])
+test_encodeNumberOfMatches_5 = assertEqual [geno00, geno01, geno00, geno11, geno00, geno01] (fst (encodeNumberOfMatches [3, 4, 3, 5, 3, 4]))
 
 test_encodeNumberOfMatches_6 :: IO ()
-test_encodeNumberOfMatches_6 = assertEqual [geno00, geno00, geno01, geno01, geno11, geno11] (encodeNumberOfMatches [2, 3, 6, 7, 9, 10])
+test_encodeNumberOfMatches_6 = assertEqual [geno00, geno00, geno01, geno01, geno11, geno11] (fst (encodeNumberOfMatches [2, 3, 6, 7, 9, 10]))
 
 test_encodeNumberOfMatches_7 :: IO ()
-test_encodeNumberOfMatches_7 = assertEqual [geno00, geno11] (encodeNumberOfMatches [3, 4])
+test_encodeNumberOfMatches_7 = assertEqual [geno00, geno11] (fst (encodeNumberOfMatches [3, 4]))
 
 test_encodeNumberOfMatches_8 :: IO ()
-test_encodeNumberOfMatches_8 = assertEqual [geno00, geno00, geno01, geno11, geno11] (encodeNumberOfMatches [0,0,3,5,6])
+test_encodeNumberOfMatches_8 = assertEqual [geno00, geno00, geno01, geno11, geno11] (fst (encodeNumberOfMatches [0,0,3,5,6]))
 
 prop_encodeNumberOfMatches_1 :: [Int] -> Bool
-prop_encodeNumberOfMatches_1 xs = encodeNumberOfMatches (sort positiveXs) == sort (encodeNumberOfMatches positiveXs)
+prop_encodeNumberOfMatches_1 xs = fst (encodeNumberOfMatches (sort positiveXs)) == sort (fst $ encodeNumberOfMatches positiveXs)
+    where positive [] = []
+          positive vs = map (+ abs (minimum vs)) vs
+          positiveXs = positive xs
+
+prop_encodeNumberOfMatches_2 :: [Int] -> Bool
+prop_encodeNumberOfMatches_2 xs = snd (encodeNumberOfMatches positiveXs) == Set.fromList positiveXs
     where positive [] = []
           positive vs = map (+ abs (minimum vs)) vs
           positiveXs = positive xs

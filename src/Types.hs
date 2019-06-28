@@ -16,7 +16,7 @@ module Types (
   Diff(..),
   Error(..),
   HaplotypeId(..),
-  Env(..)
+  Count2(..)
 ) where
 
 import           RIO
@@ -229,6 +229,13 @@ instance NFData Error
 data HaplotypeId = HaplotypeId !SampleId !Haplotype
   deriving (Eq, Ord, Show)
 
-data Env = Env {
-  dummyEnv :: Int
-}
+
+data Count2 = Count2 Int Int
+    deriving (Eq, Show)
+
+instance Semigroup Count2 where
+    (Count2 x y) <> (Count2 z v) = Count2 (x+z) (y+v)
+
+instance Monoid Count2 where
+    mempty = Count2 0 0
+    mappend = (<>)

@@ -370,38 +370,38 @@ prop_countsInPeak_4 matches =
   in r + l == sum (map (length . mSampleId) matchesInPeak) && if not (null counts) then outputPeaks == Set.singleton peak else outputPeaks == Set.empty
 
 
-test_encodeNumberOfMatches_1 :: IO ()
-test_encodeNumberOfMatches_1 = assertEqual [geno00] (fst (encodeNumberOfMatches [3]))
+test_encodeNumberOfMatchesAsGenotypes_1 :: IO ()
+test_encodeNumberOfMatchesAsGenotypes_1 = assertEqual [geno00] (fst (encodeNumberOfMatchesAsGenotypes [3]))
 
-test_encodeNumberOfMatches_2 :: IO ()
-test_encodeNumberOfMatches_2 = assertEqual [] (fst (encodeNumberOfMatches []))
+test_encodeNumberOfMatchesAsGenotypes_2 :: IO ()
+test_encodeNumberOfMatchesAsGenotypes_2 = assertEqual [] (fst (encodeNumberOfMatchesAsGenotypes []))
 
-test_encodeNumberOfMatches_3 :: IO ()
-test_encodeNumberOfMatches_3 = assertEqual [geno00, geno00, geno00] (fst (encodeNumberOfMatches [3, 3, 3]))
+test_encodeNumberOfMatchesAsGenotypes_3 :: IO ()
+test_encodeNumberOfMatchesAsGenotypes_3 = assertEqual [geno00, geno00, geno00] (fst (encodeNumberOfMatchesAsGenotypes [3, 3, 3]))
 
-test_encodeNumberOfMatches_4 :: IO ()
-test_encodeNumberOfMatches_4 = assertEqual [geno00, geno11, geno00] (fst (encodeNumberOfMatches [3, 4, 3]))
+test_encodeNumberOfMatchesAsGenotypes_4 :: IO ()
+test_encodeNumberOfMatchesAsGenotypes_4 = assertEqual [geno00, geno11, geno00] (fst (encodeNumberOfMatchesAsGenotypes [3, 4, 3]))
 
-test_encodeNumberOfMatches_5 :: IO ()
-test_encodeNumberOfMatches_5 = assertEqual [geno00, geno01, geno00, geno11, geno00, geno01] (fst (encodeNumberOfMatches [3, 4, 3, 5, 3, 4]))
+test_encodeNumberOfMatchesAsGenotypes_5 :: IO ()
+test_encodeNumberOfMatchesAsGenotypes_5 = assertEqual [geno00, geno01, geno00, geno11, geno00, geno01] (fst (encodeNumberOfMatchesAsGenotypes [3, 4, 3, 5, 3, 4]))
 
-test_encodeNumberOfMatches_6 :: IO ()
-test_encodeNumberOfMatches_6 = assertEqual [geno00, geno00, geno01, geno01, geno11, geno11] (fst (encodeNumberOfMatches [2, 3, 6, 7, 9, 10]))
+test_encodeNumberOfMatchesAsGenotypes_6 :: IO ()
+test_encodeNumberOfMatchesAsGenotypes_6 = assertEqual [geno00, geno00, geno01, geno01, geno11, geno11] (fst (encodeNumberOfMatchesAsGenotypes [2, 3, 6, 7, 9, 10]))
 
-test_encodeNumberOfMatches_7 :: IO ()
-test_encodeNumberOfMatches_7 = assertEqual [geno00, geno11] (fst (encodeNumberOfMatches [3, 4]))
+test_encodeNumberOfMatchesAsGenotypes_7 :: IO ()
+test_encodeNumberOfMatchesAsGenotypes_7 = assertEqual [geno00, geno11] (fst (encodeNumberOfMatchesAsGenotypes [3, 4]))
 
-test_encodeNumberOfMatches_8 :: IO ()
-test_encodeNumberOfMatches_8 = assertEqual [geno00, geno00, geno01, geno11, geno11] (fst (encodeNumberOfMatches [0,0,3,5,6]))
+test_encodeNumberOfMatchesAsGenotypes_8 :: IO ()
+test_encodeNumberOfMatchesAsGenotypes_8 = assertEqual [geno00, geno00, geno01, geno11, geno11] (fst (encodeNumberOfMatchesAsGenotypes [0,0,3,5,6]))
 
-prop_encodeNumberOfMatches_1 :: [Int] -> Bool
-prop_encodeNumberOfMatches_1 xs = fst (encodeNumberOfMatches (sort positiveXs)) == sort (fst $ encodeNumberOfMatches positiveXs)
+prop_encodeNumberOfMatchesAsGenotypes_1 :: [Int] -> Bool
+prop_encodeNumberOfMatchesAsGenotypes_1 xs = fst (encodeNumberOfMatchesAsGenotypes (sort positiveXs)) == sort (fst $ encodeNumberOfMatchesAsGenotypes positiveXs)
     where positive [] = []
           positive vs = map (+ abs (minimum vs)) vs
           positiveXs = positive xs
 
-prop_encodeNumberOfMatches_2 :: [Int] -> Bool
-prop_encodeNumberOfMatches_2 xs = snd (encodeNumberOfMatches positiveXs) == Set.fromList positiveXs
+prop_encodeNumberOfMatchesAsGenotypes_2 :: [Int] -> Bool
+prop_encodeNumberOfMatchesAsGenotypes_2 xs = snd (encodeNumberOfMatchesAsGenotypes positiveXs) == Set.fromList positiveXs
     where positive [] = []
           positive vs = map (+ abs (minimum vs)) vs
           positiveXs = positive xs

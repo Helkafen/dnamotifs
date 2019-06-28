@@ -40,6 +40,7 @@ dependencies:
 - QuickCheck
 - rio
 - optparse-applicative
+- microlens
 
 default-extensions: NoImplicitPrelude
 

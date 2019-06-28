@@ -18,6 +18,7 @@ import           Pipes.GZip (compress, defaultCompression)
 import qualified Pipes.ByteString as PBS
 import           System.IO (IOMode(..))
 import           Text.Printf (printf)
+import           Lens.Micro
 
 import Types
 import Range
@@ -57,7 +58,7 @@ processPeaks t0 chr patterns takeReferenceGenome peaksByFile samples xs@((peakId
     t1 <- getCurrentTime
     let (matches, numberOfHaplotypes, numberOfVariants, numberOfMatches) = processPeak patterns takeReferenceGenome samples variants
     let rangesInThisPeak = M.map (overlaps peak . getRanges) peaksByFile :: M.Map T.Text [Range Position0]
-    let report = M.elems $ M.mapWithKey (\file ranges -> reportAsByteString chr file (map (\(pea, patId, counts) -> (pea, patId, encodeNumberOfMatches (map countTotal counts))) (countsInPeaks samples matches ranges))) rangesInThisPeak :: [B.ByteString]
+    let report = M.elems $ M.mapWithKey (reportOneFile chr samples matches) rangesInThisPeak :: [B.ByteString]
     let !bs = B.concat report
     yield bs
     t2 <- getCurrentTime
@@ -65,6 +66,10 @@ processPeaks t0 chr patterns takeReferenceGenome peaksByFile samples xs@((peakId
     logInfo $ display $ formatStatus t0 t1 t2 peakId (length xs + peakId) numberOfHaplotypes numberOfVariants numberOfMatches
     logSticky $ display $ formatStatusBar t0 t2 peakId (length xs + peakId)
     processPeaks t0 chr patterns takeReferenceGenome peaksByFile samples nextVariants
+
+-- We go over all the Matches once per file (1 file = 1 list of peaks for one experiment). Could be inefficient, but since a Match contains plenty of matches it might be okay
+reportOneFile :: Chromosome -> Map Int SampleId -> Vector (Match [HaplotypeId]) -> Text -> [Range Position0] -> ByteString
+reportOneFile chr samples matches file ranges = reportAsByteString chr file (countsInPeaks samples matches ranges & (mapped . _3) %~ (encodeNumberOfMatches . map countTotal))
 
 formatStatus :: UTCTime -> UTCTime -> UTCTime -> Int -> Int -> Int -> Int -> Int -> T.Text
 formatStatus t0 t1 t2 peakId totalPeakNumber numberOfHaplotypes numberOfVariants numberOfMatches =
@@ -107,8 +112,8 @@ processPeak patterns takeReferenceGenome samples (peak, variants) = do
 countTotal :: Count2 -> Int
 countTotal (Count2 l r) = l + r
 
+--
 encodeNumberOfMatches :: [Int] -> [Genotype]
-encodeNumberOfMatches [] = []
 encodeNumberOfMatches matchNumbers = case map fst (sortBy (comparing snd) (count matchNumbers)) of
     []  -> []
     [_] -> replicate (length matchNumbers) geno00

@@ -11,18 +11,27 @@ import qualified Data.Vector.Storable as STO
 import qualified Data.Vector.Storable.Mutable as STOM
 import qualified Data.ByteString as B
 import qualified Data.Text as T
+import qualified Data.Text.Lazy as TL
+import qualified Data.Text.Lazy.Builder as TLB
 import qualified Data.Text.Encoding as TE
 import           TextShow (showt)
 import qualified RIO.Set as Set
-import           RIO.List (iterate, intercalate)
+import           RIO.List (iterate, intercalate, intersperse)
 import qualified RIO.List.Partial as LP
 import           Pipes (Producer, yield, (>->), runEffect)
 import           Pipes.GZip (compress, defaultCompression)
 import qualified Pipes.ByteString as PBS
 import           System.IO (IOMode(..))
 import           Text.Printf (printf)
-import           Data.STRef (newSTRef, readSTRef, writeSTRef)
-import           Data.List.Split (splitOn)
+import           Data.STRef (newSTRef, readSTRef, writeSTRef, modifySTRef)
+import           Data.Vector.Storable.ByteString (vectorToByteString)
+
+import qualified Language.C.Inline               as C
+import           System.IO.Unsafe (unsafePerformIO)
+import           Foreign.C.Types                 (CInt, CChar)
+import           Foreign                         (Ptr, FunPtr)
+import           Foreign.ForeignPtr              (newForeignPtr)
+
 
 import Types
 import Range
@@ -45,13 +54,15 @@ findPatterns chr motifNames peakFiles referenceGenomeFile vcfFile resultFile = d
     logInfo $ display $ T.pack $ "Population: " <> show (length sampleIdList)
     let samples = M.fromList (zip (iterate (+1) 0) sampleIdList)
     t0 <- getCurrentTime
+    fakePos <- newIORef (1 :: Int)
     Import.withFile resultFile WriteMode $ \fh -> do
         let header = "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t" <> TE.encodeUtf8 (T.intercalate "\t" (map (\(SampleId s _) -> s) sampleIdList))  <> "\n"
-        runEffect $ compress defaultCompression (yield header >> processPeaks t0 chr patterns takeReferenceGenome peaksByFile samples (zip [1..] variants)) >-> PBS.toHandle fh
+        runEffect $ compress defaultCompression (yield header >> processPeaks t0 fakePos chr patterns takeReferenceGenome peaksByFile samples (zip [1..] variants)) >-> PBS.toHandle fh
         logSticky ""
     return True
 
 processPeaks :: HasLogFunc env => UTCTime
+             -> IORef Int
              -> Chromosome
              -> ([T.Text], Patterns)
              -> (Range Position0 -> BaseSequencePosition)
@@ -59,13 +70,12 @@ processPeaks :: HasLogFunc env => UTCTime
              -> M.Map Int SampleId
              -> [(Int, (Range Position0, [Variant]))]
              -> Producer B.ByteString (RIO env) ()
-processPeaks _ _ _ _ _ _ [] = yield B.empty
-processPeaks t0 chr@(Chromosome chro) (patternNames, patterns) takeReferenceGenome peaksByFile samples xs@((peakId,variants@(peak,_)):nextVariants) = do
+processPeaks _ _ _ _ _ _ _ [] = yield B.empty
+processPeaks t0 fakePos chr@(Chromosome chro) (patternNames, patterns) takeReferenceGenome peaksByFile samples xs@((peakId,variants@(peak,_)):nextVariants) = do
     t1 <- getCurrentTime
     let (matches, numberOfHaplotypes, numberOfVariants, numberOfMatches) = processPeak patterns takeReferenceGenome samples variants
     let rangesInThisPeak = M.map (overlaps peak . getRanges) peaksByFile :: M.Map T.Text [Range Position0]
     let countsAsGenotypes = countMatchesAndExpressAsHaplotypes samples matches rangesInThisPeak
-    fakePos <- newIORef (1 :: Int)
     forM_ (M.assocs countsAsGenotypes) $ \((source, Range (Position start) (Position end), patternId), (genotypes, s)) -> do
         posStr <- showt <$> readIORef fakePos
         let idStr = source <> "," <> patternNames LP.!! patternId <> "," <> showt start <> "-" <> showt end
@@ -74,14 +84,31 @@ processPeaks t0 chr@(Chromosome chro) (patternNames, patterns) takeReferenceGeno
         let qualStr = "."
         let filterStr = "."
         let infoStr = "COUNTS=" <> T.intercalate "," (map showt (Set.toList s))
-        let genotypesStr = T.intercalate "\t" (map showt (STO.toList genotypes))
-        yield $ TE.encodeUtf8 $ T.intercalate "\t" [chro, posStr, idStr, refStr, altStr, qualStr, filterStr, infoStr, genotypesStr] <> "\n"
+        let genotypesStr = TL.toStrict $ TLB.toLazyText $ mconcat $ map TLB.fromText (intersperse "\t" (map (\x -> if x == geno00 then "0|0" else if x == geno11 then "1|1" else "0|1") (STO.toList genotypes)))
+        yield $ TE.encodeUtf8 $ T.intercalate "\t" [chro, posStr, idStr, refStr, altStr, qualStr, filterStr, infoStr]
+        yield (genoText genotypes)
+        yield "\n"
         modifyIORef fakePos (+1)
     t2 <- getCurrentTime
     when (M.size countsAsGenotypes == 0) (logWarn "No match for this peak")
     logInfo $ display $ formatStatus t0 t1 t2 peakId (length xs + peakId) numberOfHaplotypes numberOfVariants numberOfMatches
     logSticky $ display $ formatStatusBar t0 t2 peakId (length xs + peakId)
-    processPeaks t0 chr (patternNames, patterns) takeReferenceGenome peaksByFile samples nextVariants
+    processPeaks t0 fakePos chr (patternNames, patterns) takeReferenceGenome peaksByFile samples nextVariants
+
+
+genoText :: STO.Vector Genotype -> B.ByteString
+genoText ge = vectorToByteString $ STO.create $ do
+        x <- STOM.replicate (len * 4) (ord '=')
+        mi <- newSTRef (0 :: Int)
+        STO.forM_ ge $ \v -> do
+            i <- readSTRef mi
+            if      v == geno00 then do STOM.unsafeWrite x (i*4) 9 >> STOM.unsafeWrite x (i*4+1) 48 >> STOM.unsafeWrite x (i*4+2) 124 >> STOM.unsafeWrite x (i*4+3) 48
+            else if v == geno01 then do STOM.unsafeWrite x (i*4) 9 >> STOM.unsafeWrite x (i*4+1) 48 >> STOM.unsafeWrite x (i*4+2) 124 >> STOM.unsafeWrite x (i*4+3) 49
+            else                     do STOM.unsafeWrite x (i*4) 9 >> STOM.unsafeWrite x (i*4+1) 49 >> STOM.unsafeWrite x (i*4+2) 124 >> STOM.unsafeWrite x (i*4+3) 49
+            modifySTRef mi (+1)
+        return x
+    where len = STO.length ge
+
 
 
 formatStatus :: UTCTime -> UTCTime -> UTCTime -> Int -> Int -> Int -> Int -> Int -> T.Text

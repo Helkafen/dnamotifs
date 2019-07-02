@@ -42,6 +42,7 @@ dependencies:
 - optparse-applicative
 - microlens
 - file-embed
+- bytestring-to-vector
 
 default-extensions: NoImplicitPrelude
 

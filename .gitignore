@@ -6,3 +6,8 @@ chr*.bed
 .Rhistory
 .bed
 .stack-work-profile/
+HOCOMOCOv11_full_standard_thresholds_HUMAN_mono.txt
+*.bed
+*.fa
+*.gz
+raw/

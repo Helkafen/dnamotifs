@@ -28,7 +28,7 @@ loadHocomocoPatternsAndScoreThresholds wantedHocomocoPatterns = do
    let compiledPatterns = mkPatterns $ map snd $ M.toAscList i
    let patternNames = map fst $ M.toAscList i
    let (numberOfLoadedMotifs, numberOfWantedMotifs) = (length patternNames, length wantedHocomocoPatterns)
-   logInfo (display $ "Loaded motif file: (found " <> showt numberOfLoadedMotifs <> "/" <> showt numberOfWantedMotifs <> " motifs)")
+   logInfo (display $ "Loaded motif file. Found " <> showt numberOfLoadedMotifs <> "/" <> showt numberOfWantedMotifs <> " motifs")
    when (numberOfLoadedMotifs /= numberOfWantedMotifs) $ do
     logWarn $ display $ "The following motifs were not found: " <> T.intercalate ", " (Set.toList $ Set.difference (Set.fromList wantedHocomocoPatterns) (Set.fromList patternNames))
    pure (patternNames, compiledPatterns)

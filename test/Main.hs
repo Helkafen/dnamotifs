@@ -28,7 +28,6 @@ import Bed (parseBedContent)
 import MotifDefinition (parseHocomocoMotifsContent)
 import Haplotype (applyVariants, variantsToDiffs)
 import Prelude
-import Debug.Trace (traceShow)
 
 mkSeq :: [Nucleotide] -> B.ByteString
 mkSeq = B.pack . map unNuc

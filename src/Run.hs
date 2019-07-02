@@ -22,6 +22,7 @@ import qualified Pipes.ByteString as PBS
 import           System.IO (IOMode(..))
 import           Text.Printf (printf)
 import           Data.STRef (newSTRef, readSTRef, writeSTRef)
+import           Data.List.Split (splitOn)
 
 import Types
 import Range
@@ -30,11 +31,13 @@ import Fasta (loadFasta)
 import Vcf (readVcfWithGenotypes)
 import PatternFind (findPatternsInBlock, mkNucleotideAndPositionBlock, Patterns)
 import Haplotype (buildAllHaplotypes)
+import MotifDefinition (loadHocomocoPatternsAndScoreThresholds)
 import Import
 
 
-findPatterns :: HasLogFunc env => Chromosome -> ([T.Text], Patterns) -> [FilePath] -> FilePath -> FilePath -> FilePath -> RIO env Bool
-findPatterns chr patterns peakFiles referenceGenomeFile vcfFile resultFile = do
+findPatterns :: HasLogFunc env => Chromosome -> [T.Text] -> [FilePath] -> FilePath -> FilePath -> FilePath -> RIO env Bool
+findPatterns chr motifNames peakFiles referenceGenomeFile vcfFile resultFile = do
+    patterns <- loadHocomocoPatternsAndScoreThresholds motifNames
     (takeReferenceGenome, referenceGenomeSize) <- loadFasta chr referenceGenomeFile
     logInfo $ display $ "Chromosome " <> unChr chr <> " : " <> T.pack (show referenceGenomeSize) <> " bases"
     (allPeaks, peaksByFile) <- readAllPeaks chr peakFiles

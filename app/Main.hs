@@ -2,10 +2,9 @@
 module Main where
 
 import qualified Data.Text                       as T
+import           Data.List.Split (splitOn)
 import           Types
 import           Run                             (findPatterns)
-import           MotifDefinition                 (loadHocomocoPatternsAndScoreThresholds)
-import           Data.List.Split                 (splitOn)
 import           RIO.Prelude.Simple              (runSimpleApp)
 import           Options.Applicative
 
@@ -13,9 +12,9 @@ import           Options.Applicative
 import Import
 
 data Config = Config
-  { cfgChromosome        :: String
+  { cfgChromosome        :: T.Text
   , cfgReferenceGenome   :: String
-  , cfgMotifNames        :: String
+  , cfgMotifNames        :: T.Text
   , cfgBedFiles          :: String
   , cfgInputVCF          :: String
   , cfgOutput            :: String
@@ -34,8 +33,7 @@ main :: IO()
 main = runSimpleApp $ do
         let p = prefs (disambiguate <> showHelpOnEmpty <> columns 100)
         cfg <- liftIO $ customExecParser p (info (config <**> helper) ( fullDesc <> progDesc "DNAMotif finds PWM motifs in a VCF files" ))
-        patterns <- loadHocomocoPatternsAndScoreThresholds (map T.pack $ splitOn "," (cfgMotifNames cfg))
-        success <- findPatterns (Chromosome $ T.pack (cfgChromosome cfg)) patterns (splitOn "," (cfgBedFiles cfg)) (cfgReferenceGenome cfg) (cfgInputVCF cfg) (cfgOutput cfg)
+        success <- findPatterns (Chromosome (cfgChromosome cfg)) (T.splitOn "," (cfgMotifNames cfg)) (splitOn "," (cfgBedFiles cfg)) (cfgReferenceGenome cfg) (cfgInputVCF cfg) (cfgOutput cfg)
         if success
           then logInfo "Success"
           else logError "Error"

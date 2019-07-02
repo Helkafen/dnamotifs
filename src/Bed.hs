@@ -22,18 +22,11 @@ readAllPeaks
   -> [FilePath]
   -> RIO env (Ranges Position0, M.Map T.Text (Ranges Position0))
 readAllPeaks chr peakFiles = do
-  xs <- mapM (readPeaks chr) peakFiles
-  _  <- mapM
-    (\(peakFile, ranges) -> logInfo
-      (  display
-      $  "Loaded BED file: "
-      <> (T.pack peakFile)
-      <> " ("
-      <> (T.pack (show (rangesLength ranges)))
-      <> " peaks)"
-      )
-    )
-    (zip peakFiles xs)
+  xs <- mapM (\p -> do
+    peaks <- readPeaks chr p
+    logInfo (display ("Loaded BED file: " <> T.pack p <> " (" <> T.pack (show (rangesLength peaks)) <> " peaks)"))
+    return peaks
+    ) peakFiles
   pure (mconcat xs, simplifyFilenames $ M.fromList (zip peakFiles xs))
 
 simplifyFilenames :: M.Map FilePath a -> M.Map T.Text a

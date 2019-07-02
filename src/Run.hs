@@ -33,7 +33,7 @@ import Haplotype (buildAllHaplotypes)
 import Import
 
 
-findPatterns :: HasLogFunc env => Chromosome -> Patterns -> [FilePath] -> FilePath -> FilePath -> FilePath -> RIO env Bool
+findPatterns :: HasLogFunc env => Chromosome -> ([T.Text], Patterns) -> [FilePath] -> FilePath -> FilePath -> FilePath -> RIO env Bool
 findPatterns chr patterns peakFiles referenceGenomeFile vcfFile resultFile = do
     (takeReferenceGenome, referenceGenomeSize) <- loadFasta chr referenceGenomeFile
     logInfo $ display $ "Chromosome " <> unChr chr <> " : " <> T.pack (show referenceGenomeSize) <> " bases"
@@ -43,32 +43,42 @@ findPatterns chr patterns peakFiles referenceGenomeFile vcfFile resultFile = do
     let samples = M.fromList (zip (iterate (+1) 0) sampleIdList)
     t0 <- getCurrentTime
     Import.withFile resultFile WriteMode $ \fh -> do
-        let header = "chromosome\tsource\tpeakStart\tpeakStop\tpatternId\tsampleId\tdistinctMatchCount\t" <> TE.encodeUtf8 (T.intercalate "\t" (map (\(SampleId s _) -> s) sampleIdList))  <> "\n"
+        let header = "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t" <> TE.encodeUtf8 (T.intercalate "\t" (map (\(SampleId s _) -> s) sampleIdList))  <> "\n"
         runEffect $ compress defaultCompression (yield header >> processPeaks t0 chr patterns takeReferenceGenome peaksByFile samples (zip [1..] variants)) >-> PBS.toHandle fh
         logSticky ""
     return True
 
 processPeaks :: HasLogFunc env => UTCTime
              -> Chromosome
-             -> Patterns
+             -> ([T.Text], Patterns)
              -> (Range Position0 -> BaseSequencePosition)
              -> M.Map T.Text (Ranges Position0)
              -> M.Map Int SampleId
              -> [(Int, (Range Position0, [Variant]))]
              -> Producer B.ByteString (RIO env) ()
 processPeaks _ _ _ _ _ _ [] = yield B.empty
-processPeaks t0 chr@(Chromosome chro) patterns takeReferenceGenome peaksByFile samples xs@((peakId,variants@(peak,_)):nextVariants) = do
+processPeaks t0 chr@(Chromosome chro) (patternNames, patterns) takeReferenceGenome peaksByFile samples xs@((peakId,variants@(peak,_)):nextVariants) = do
     t1 <- getCurrentTime
     let (matches, numberOfHaplotypes, numberOfVariants, numberOfMatches) = processPeak patterns takeReferenceGenome samples variants
     let rangesInThisPeak = M.map (overlaps peak . getRanges) peaksByFile :: M.Map T.Text [Range Position0]
     let countsAsGenotypes = countMatchesAndExpressAsHaplotypes samples matches rangesInThisPeak
-    forM_ (M.assocs countsAsGenotypes) $ \((source, Range (Position start) (Position end), patternId), genotypes) ->
-        yield $ TE.encodeUtf8 $ T.intercalate "\t" [chro, source, showt start, showt end, showt patternId, T.intercalate "\t" (map showt (STO.toList genotypes))] <> "\n"
+    fakePos <- newIORef (1 :: Int)
+    forM_ (M.assocs countsAsGenotypes) $ \((source, Range (Position start) (Position end), patternId), (genotypes, s)) -> do
+        posStr <- showt <$> readIORef fakePos
+        let idStr = source <> "," <> patternNames LP.!! patternId <> "," <> showt start <> "-" <> showt end
+        let refStr = "."
+        let altStr = "."
+        let qualStr = "."
+        let filterStr = "."
+        let infoStr = "COUNTS=" <> T.intercalate "," (map showt (Set.toList s))
+        let genotypesStr = T.intercalate "\t" (map showt (STO.toList genotypes))
+        yield $ TE.encodeUtf8 $ T.intercalate "\t" [chro, posStr, idStr, refStr, altStr, qualStr, filterStr, infoStr, genotypesStr] <> "\n"
+        modifyIORef fakePos (+1)
     t2 <- getCurrentTime
     when (M.size countsAsGenotypes == 0) (logWarn "No match for this peak")
     logInfo $ display $ formatStatus t0 t1 t2 peakId (length xs + peakId) numberOfHaplotypes numberOfVariants numberOfMatches
     logSticky $ display $ formatStatusBar t0 t2 peakId (length xs + peakId)
-    processPeaks t0 chr patterns takeReferenceGenome peaksByFile samples nextVariants
+    processPeaks t0 chr (patternNames, patterns) takeReferenceGenome peaksByFile samples nextVariants
 
 
 formatStatus :: UTCTime -> UTCTime -> UTCTime -> Int -> Int -> Int -> Int -> Int -> T.Text
@@ -82,9 +92,9 @@ formatStatus t0 t1 t2 peakId totalPeakNumber numberOfHaplotypes numberOfVariants
           variantsString = show numberOfVariants <> " variants"
           matchesString = show numberOfMatches <> " matches"
 
-countMatchesAndExpressAsHaplotypes :: M.Map Int SampleId -> Vector (Match [HaplotypeId]) -> M.Map T.Text [Range Position0] -> M.Map (T.Text, Range Position0, Int) (STO.Vector Genotype)
+countMatchesAndExpressAsHaplotypes :: M.Map Int SampleId -> Vector (Match [HaplotypeId]) -> M.Map T.Text [Range Position0] -> M.Map (T.Text, Range Position0, Int) (STO.Vector Genotype, Set.Set Int)
 countMatchesAndExpressAsHaplotypes samples matches rangesInThisPeak =
-    M.map (STO.fromList . encodeNumberOfMatches . STO.toList) $ STO.createT $ do
+    M.map (\xs ->  let (ge, s) = encodeNumberOfMatchesAsGenotypes (STO.toList xs) in (STO.fromList ge, s)) $ STO.createT $ do
         mc <- newSTRef M.empty
         forM_ matches $ \(Match patternId _ pos haplos _) -> do
             let files = M.assocs $ M.filter (\ranges -> inRanges ranges (Position pos)) rangesInThisPeak :: [(T.Text, [Range Position0])]

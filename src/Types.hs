@@ -145,10 +145,10 @@ instance Show Genotype where
     | otherwise = error "bad genotype " <> show ge
 
 instance TextShow Genotype where
-  showb (Genotype 10) = showb ("0|0" :: T.Text)
-  showb (Genotype 11) = showb ("0|1" :: T.Text)
-  showb (Genotype 12) = showb ("1|0" :: T.Text)
-  showb (Genotype 13) = showb ("1|1" :: T.Text)
+  showb (Genotype 10) = fromText ("0|0" :: T.Text)
+  showb (Genotype 11) = fromText ("0|1" :: T.Text)
+  showb (Genotype 12) = fromText ("1|0" :: T.Text)
+  showb (Genotype 13) = fromText ("1|1" :: T.Text)
   showb (Genotype _) = error "Bad genotype"
 
 type BaseSequence = B.ByteString

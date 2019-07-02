@@ -2,13 +2,35 @@
 module MotifDefinition
   ( loadHocomocoMotifs
   , parseHocomocoMotifsContent
+  , loadHocomocoPatternsAndScoreThresholds
   )
 where
 
+import           TextShow (showt)
+import           RIO.Partial (read)
 import           Data.Attoparsec.Text
 import qualified Data.Text                     as T
+import qualified RIO.Set                       as Set
+import qualified Data.Map                      as M
 import           Import
+import           PatternFind
 
+
+loadHocomocoPatternsAndScoreThresholds :: HasLogFunc env => FilePath -> FilePath -> [T.Text] -> RIO env ([T.Text], Patterns)
+loadHocomocoPatternsAndScoreThresholds pwmFile thresholdsFile wantedHocomocoPatterns = do
+   thresholds <- (M.fromList . map (\l -> (firstColumn l, lastColumn l)) . T.lines) <$> readFileUtf8 thresholdsFile
+   patterns <- (M.fromList . filter ((`elem` wantedHocomocoPatterns) . fst)) <$> loadHocomocoMotifs pwmFile
+   let i = M.intersectionWith Pattern (fmap (floor . (*1000)) thresholds) patterns
+   let compiledPatterns = mkPatterns $ map snd $ M.toAscList i
+   let patternNames = map fst $ M.toAscList i
+   let (numberOfLoadedMotifs, numberOfWantedMotifs) = (length patternNames, length wantedHocomocoPatterns)
+   logInfo (display $ "Loaded motif file: " <> (T.pack pwmFile) <> " (found " <> showt numberOfLoadedMotifs <> "/" <> showt numberOfWantedMotifs <> " motifs)")
+   when (numberOfLoadedMotifs /= numberOfWantedMotifs) $ do
+    logWarn $ display $ "The following motifs were not found: " <> T.intercalate ", " (Set.toList $ Set.difference (Set.fromList wantedHocomocoPatterns) (Set.fromList patternNames))
+   pure (patternNames, compiledPatterns)
+   where firstColumn = T.takeWhile (/='\t')
+         lastColumn :: T.Text -> Double
+         lastColumn = read . T.unpack . T.reverse . T.takeWhile (/='\t') . T.reverse
 
 loadHocomocoMotifs
   :: HasLogFunc env => FilePath -> RIO env [(T.Text, [Pweight])]
@@ -22,8 +44,7 @@ loadHocomocoMotifs path = do
       <> ": Error. "
       <> show errors
       )
-    Right patterns -> do logInfo (display $ "Loaded motif file: " <> (T.pack path))
-                         return patterns
+    Right patterns -> return patterns
 
 parseHocomocoMotifsContent :: T.Text -> Either [String] [(T.Text, [Pweight])]
 parseHocomocoMotifsContent content =

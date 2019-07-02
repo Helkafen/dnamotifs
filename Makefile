@@ -13,13 +13,13 @@ variants_in_peaks.recode.vcf.gz: merged_peaks.bed /home/seb/masters/topmed/exome
 homer.motifs:
 	wget http://homer.ucsd.edu/homer/custom.motifs -O homer.motifs
 
-HOCOMOCOv11_core_pwms_HUMAN_mono.txt:
-	wget http://hocomoco11.autosome.ru/final_bundle/hocomoco11/core/HUMAN/mono/HOCOMOCOv11_core_pwms_HUMAN_mono.txt
+HOCOMOCOv11_full_pwms_HUMAN_mono.txt:
+	wget http://hocomoco11.autosome.ru/final_bundle/hocomoco11/full/HUMAN/mono/HOCOMOCOv11_full_pwms_HUMAN_mono.txt
 
-HOCOMOCOv11_core_standard_thresholds_HUMAN_mono.txt:
-	wget http://hocomoco11.autosome.ru/final_bundle/hocomoco11/core/HUMAN/mono/HOCOMOCOv11_core_standard_thresholds_HUMAN_mono.txt
+HOCOMOCOv11_full_standard_thresholds_HUMAN_mono.txt:
+	wget http://hocomoco11.autosome.ru/final_bundle/hocomoco11/full/HUMAN/mono/HOCOMOCOv11_full_standard_thresholds_HUMAN_mono.txt
 
-hocomoco_thresholds.tab: HOCOMOCOv11_core_standard_thresholds_HUMAN_mono.txt
+hocomoco_thresholds.tab: HOCOMOCOv11_full_standard_thresholds_HUMAN_mono.txt
 	cat $^ | cut -f 1,2 | grep -v "P-values" > $@
 
 merged_peaks_1.bed: merged_peaks.bed
@@ -30,71 +30,78 @@ variants_in_peaks_1.recode.vcf.gz: variants_in_peaks.recode.vcf.gz merged_peaks_
 
 ALL_BED=bed/Bcell-13.bed,bed/CD4-9.bed,bed/CD8-10.bed,bed/CLP-14.bed,bed/CMP-4.bed,bed/Erythro-15.bed,bed/GMP-5.bed,bed/HSC-1.bed,bed/LMPP-3.bed,bed/MCP.bed,bed/mDC.bed,bed/MEGA1.bed,bed/MEGA2.bed,bed/MEP-6.bed,bed/Mono-7.bed,bed/MPP-2.bed,bed/Nkcell-11.bed,bed/pDC.bed
 
-chr1.peaks.tab.gz: hg38.fa raw/vcf/chr1.vcf.gz HOCOMOCOv11_core_pwms_HUMAN_mono.txt hocomoco_thresholds.tab
-	stack exec dnamotifs -- 1 $(ALL_BED) $^ $@
+# Not found: JFOS_HUMAN.H11MO.0.A,JFOSB_HUMAN.H11MO.0.A
+MOTIFS=JUNB_HUMAN.H11MO.0.A,FOSL1_HUMAN.H11MO.0.A,FOSL2_HUMAN.H11MO.0.A,JDP2_HUMAN.H11MO.0.D,GATA1_HUMAN.H11MO.0.A,GATA2_HUMAN.H11MO.0.A,GATA3_HUMAN.H11MO.0.A,GATA4_HUMAN.H11MO.0.A,GATA5_HUMAN.H11MO.0.D,GATA6_HUMAN.H11MO.0.A,JUN_HUMAN.H11MO.0.A,JUND_HUMAN.H11MO.0.A,BATF_HUMAN.H11MO.0.A,ATF3_HUMAN.H11MO.0.A,BACH1_HUMAN.H11MO.0.A,BACH2_HUMAN.H11MO.0.A,NFE2_HUMAN.H11MO.0.A,CEBPA_HUMAN.H11MO.0.A,CEBPB_HUMAN.H11MO.0.A,CEBPD_HUMAN.H11MO.0.C,CEBPE_HUMAN.H11MO.0.A,CEBPG_HUMAN.H11MO.0.B,SPIB_HUMAN.H11MO.0.A,IRF8_HUMAN.H11MO.0.B,SPI1_HUMAN.H11MO.0.A,MESP1_HUMAN.H11MO.0.D,ID4_HUMAN.H11MO.0.D,HTF4_HUMAN.H11MO.0.A,ITF2_HUMAN.H11MO.0.C,STAT1_HUMAN.H11MO.0.A,STAT2_HUMAN.H11MO.0.A,SPIC_HUMAN.H11MO.0.D,CTCF_HUMAN.H11MO.0.A,IRF1_HUMAN.H11MO.0.A,DBP_HUMAN.H11MO.0.B,MAFK_HUMAN.H11MO.1.A,ATF4_HUMAN.H11MO.0.A,ASCL1_HUMAN.H11MO.0.A,ASCL2_HUMAN.H11MO.0.D,TFE2_HUMAN.H11MO.0.A,MYOD1_HUMAN.H11MO.0.A,EVI1_HUMAN.H11MO.0.B,IRF3_HUMAN.H11MO.0.B,ZEB1_HUMAN.H11MO.0.A,IRF9_HUMAN.H11MO.0.C,HEN1_HUMAN.H11MO.0.C,LYL1_HUMAN.H11MO.0.A
 
-chr2.peaks.tab.gz: hg38.fa raw/vcf/chr2.vcf.gz HOCOMOCOv11_core_pwms_HUMAN_mono.txt hocomoco_thresholds.tab
-	stack exec dnamotifs -- 2 $(ALL_BED) $^ $@
+OPTIONS=--motifs $(MOTIFS) --bed-files $(ALL_BED) --ref-genome hg38.fa --hocomoco-file HOCOMOCOv11_full_pwms_HUMAN_mono.txt --hocomoco-thresholds hocomoco_thresholds.tab
 
-chr3.peaks.tab.gz: hg38.fa raw/vcf/chr3.vcf.gz HOCOMOCOv11_core_pwms_HUMAN_mono.txt hocomoco_thresholds.tab
-	stack exec dnamotifs -- 3 $(ALL_BED) $^ $@
+COMMON_DEPS=hg38.fa HOCOMOCOv11_full_pwms_HUMAN_mono.txt hocomoco_thresholds.tab
 
-chr4.peaks.tab.gz: hg38.fa raw/vcf/chr4.vcf.gz HOCOMOCOv11_core_pwms_HUMAN_mono.txt hocomoco_thresholds.tab
-	stack exec dnamotifs -- 4 $(ALL_BED) $^ $@
+chr1.peaks.tab.gz: $(COMMON_DEPS) raw/vcf/chr1.vcf.gz
+	stack exec dnamotifs -- $(OPTIONS) --chromosome 1 --vcf raw/vcf/chr1.vcf.gz --output-file chr1.peaks.tab.gz
 
-chr5.peaks.tab.gz: hg38.fa raw/vcf/chr5.vcf.gz HOCOMOCOv11_core_pwms_HUMAN_mono.txt hocomoco_thresholds.tab
-	stack exec dnamotifs -- 5 $(ALL_BED) $^ $@
+chr2.peaks.tab.gz: $(COMMON_DEPS) raw/vcf/chr2.vcf.gz
+	stack exec dnamotifs -- $(OPTIONS) --chromosome 2 --vcf raw/vcf/chr2.vcf.gz --output-file chr2.peaks.tab.gz
 
-chr6.peaks.tab.gz: hg38.fa raw/vcf/chr6.vcf.gz HOCOMOCOv11_core_pwms_HUMAN_mono.txt hocomoco_thresholds.tab
-	stack exec dnamotifs -- 6 $(ALL_BED) $^ $@
+chr3.peaks.tab.gz: $(COMMON_DEPS) raw/vcf/chr3.vcf.gz
+	stack exec dnamotifs -- $(OPTIONS) --chromosome 3 --vcf raw/vcf/chr3.vcf.gz --output-file chr3.peaks.tab.gz
 
-chr7.peaks.tab.gz: hg38.fa raw/vcf/chr7.vcf.gz HOCOMOCOv11_core_pwms_HUMAN_mono.txt hocomoco_thresholds.tab
-	stack exec dnamotifs -- 7 $(ALL_BED) $^ $@
+chr4.peaks.tab.gz: $(COMMON_DEPS) raw/vcf/chr4.vcf.gz
+	stack exec dnamotifs -- $(OPTIONS) --chromosome 4 --vcf raw/vcf/chr4.vcf.gz --output-file chr4.peaks.tab.gz
 
-chr8.peaks.tab.gz: hg38.fa raw/vcf/chr8.vcf.gz HOCOMOCOv11_core_pwms_HUMAN_mono.txt hocomoco_thresholds.tab
-	stack exec dnamotifs -- 8 $(ALL_BED) $^ $@
+chr5.peaks.tab.gz: $(COMMON_DEPS) raw/vcf/chr5.vcf.gz
+	stack exec dnamotifs -- $(OPTIONS) --chromosome 5 --vcf raw/vcf/chr5.vcf.gz --output-file chr5.peaks.tab.gz
 
-chr9.peaks.tab.gz: hg38.fa raw/vcf/chr9.vcf.gz HOCOMOCOv11_core_pwms_HUMAN_mono.txt hocomoco_thresholds.tab
-	stack exec dnamotifs -- 9 $(ALL_BED) $^ $@
+chr6.peaks.tab.gz: $(COMMON_DEPS) raw/vcf/chr6.vcf.gz
+	stack exec dnamotifs -- $(OPTIONS) --chromosome 6 --vcf raw/vcf/chr6.vcf.gz --output-file chr6.peaks.tab.gz
 
-chr10.peaks.tab.gz: hg38.fa raw/vcf/chr10.vcf.gz HOCOMOCOv11_core_pwms_HUMAN_mono.txt hocomoco_thresholds.tab
-	stack exec dnamotifs -- 10 $(ALL_BED) $^ $@
+chr7.peaks.tab.gz: $(COMMON_DEPS) raw/vcf/chr7.vcf.gz
+	stack exec dnamotifs -- $(OPTIONS) --chromosome 7 --vcf raw/vcf/chr7.vcf.gz --output-file chr7.peaks.tab.gz
 
-chr11.peaks.tab.gz: hg38.fa raw/vcf/chr11.vcf.gz HOCOMOCOv11_core_pwms_HUMAN_mono.txt hocomoco_thresholds.tab
-	stack exec dnamotifs -- 11 $(ALL_BED) $^ $@
+chr8.peaks.tab.gz: $(COMMON_DEPS) raw/vcf/chr8.vcf.gz
+	stack exec dnamotifs -- $(OPTIONS) --chromosome 8 --vcf raw/vcf/chr8.vcf.gz --output-file chr8.peaks.tab.gz
 
-chr12.peaks.tab.gz: hg38.fa raw/vcf/chr12.vcf.gz HOCOMOCOv11_core_pwms_HUMAN_mono.txt hocomoco_thresholds.tab
-	stack exec dnamotifs -- 12 $(ALL_BED) $^ $@
+chr9.peaks.tab.gz: $(COMMON_DEPS) raw/vcf/chr9.vcf.gz
+	stack exec dnamotifs -- $(OPTIONS) --chromosome 9 --vcf raw/vcf/chr9.vcf.gz --output-file chr9.peaks.tab.gz
 
-chr13.peaks.tab.gz: hg38.fa raw/vcf/chr13.vcf.gz HOCOMOCOv11_core_pwms_HUMAN_mono.txt hocomoco_thresholds.tab
-	stack exec dnamotifs -- 13 $(ALL_BED) $^ $@
+chr10.peaks.tab.gz: $(COMMON_DEPS) raw/vcf/chr10.vcf.gz
+	stack exec dnamotifs -- $(OPTIONS) --chromosome 10 --vcf raw/vcf/chr10.vcf.gz --output-file chr10.peaks.tab.gz
 
-chr14.peaks.tab.gz: hg38.fa raw/vcf/chr14.vcf.gz HOCOMOCOv11_core_pwms_HUMAN_mono.txt hocomoco_thresholds.tab
-	stack exec dnamotifs -- 14 $(ALL_BED) $^ $@
+chr11.peaks.tab.gz: $(COMMON_DEPS) raw/vcf/chr11.vcf.gz
+	stack exec dnamotifs -- $(OPTIONS) --chromosome 11 --vcf raw/vcf/chr11.vcf.gz --output-file chr11.peaks.tab.gz
 
-chr15.peaks.tab.gz: hg38.fa raw/vcf/chr15.vcf.gz HOCOMOCOv11_core_pwms_HUMAN_mono.txt hocomoco_thresholds.tab
-	stack exec dnamotifs -- 15 $(ALL_BED) $^ $@
+chr12.peaks.tab.gz: $(COMMON_DEPS) raw/vcf/chr12.vcf.gz
+	stack exec dnamotifs -- $(OPTIONS) --chromosome 12 --vcf raw/vcf/chr12.vcf.gz --output-file chr12.peaks.tab.gz
 
-chr16.peaks.tab.gz: hg38.fa raw/vcf/chr16.vcf.gz HOCOMOCOv11_core_pwms_HUMAN_mono.txt hocomoco_thresholds.tab
-	stack exec dnamotifs -- 16 $(ALL_BED) $^ $@
+chr13.peaks.tab.gz: $(COMMON_DEPS) raw/vcf/chr13.vcf.gz
+	stack exec dnamotifs -- $(OPTIONS) --chromosome 13 --vcf raw/vcf/chr13.vcf.gz --output-file chr13.peaks.tab.gz
 
-chr17.peaks.tab.gz: hg38.fa raw/vcf/chr17.vcf.gz HOCOMOCOv11_core_pwms_HUMAN_mono.txt hocomoco_thresholds.tab
-	stack exec dnamotifs -- 17 $(ALL_BED) $^ $@
+chr14.peaks.tab.gz: $(COMMON_DEPS) raw/vcf/chr14.vcf.gz
+	stack exec dnamotifs -- $(OPTIONS) --chromosome 14 --vcf raw/vcf/chr14.vcf.gz --output-file chr14.peaks.tab.gz
 
-chr18.peaks.tab.gz: hg38.fa raw/vcf/chr18.vcf.gz HOCOMOCOv11_core_pwms_HUMAN_mono.txt hocomoco_thresholds.tab
-	stack exec dnamotifs -- 18 $(ALL_BED) $^ $@
+chr15.peaks.tab.gz: $(COMMON_DEPS) raw/vcf/chr15.vcf.gz
+	stack exec dnamotifs -- $(OPTIONS) --chromosome 15 --vcf raw/vcf/chr15.vcf.gz --output-file chr15.peaks.tab.gz
 
-chr19.peaks.tab.gz: hg38.fa raw/vcf/chr19.vcf.gz HOCOMOCOv11_core_pwms_HUMAN_mono.txt hocomoco_thresholds.tab
-	stack exec dnamotifs -- 19 $(ALL_BED) $^ $@
+chr16.peaks.tab.gz: $(COMMON_DEPS) raw/vcf/chr16.vcf.gz
+	stack exec dnamotifs -- $(OPTIONS) --chromosome 16 --vcf raw/vcf/chr16.vcf.gz --output-file chr16.peaks.tab.gz
 
-chr20.peaks.tab.gz: hg38.fa raw/vcf/chr20.vcf.gz HOCOMOCOv11_core_pwms_HUMAN_mono.txt hocomoco_thresholds.tab
-	stack exec dnamotifs -- 20 $(ALL_BED) $^ $@
+chr17.peaks.tab.gz: $(COMMON_DEPS) raw/vcf/chr17.vcf.gz
+	stack exec dnamotifs -- $(OPTIONS) --chromosome 17 --vcf raw/vcf/chr17.vcf.gz --output-file chr17.peaks.tab.gz
 
-chr21.peaks.tab.gz: hg38.fa raw/vcf/chr21.vcf.gz HOCOMOCOv11_core_pwms_HUMAN_mono.txt hocomoco_thresholds.tab
-	stack exec dnamotifs -- 21 $(ALL_BED) $^ $@
+chr18.peaks.tab.gz: $(COMMON_DEPS) raw/vcf/chr18.vcf.gz
+	stack exec dnamotifs -- $(OPTIONS) --chromosome 18 --vcf raw/vcf/chr18.vcf.gz --output-file chr18.peaks.tab.gz
 
-chr22.peaks.tab.gz: hg38.fa raw/vcf/chr22.vcf.gz HOCOMOCOv11_core_pwms_HUMAN_mono.txt hocomoco_thresholds.tab
-	stack exec dnamotifs -- 22 $(ALL_BED) $^ $@
+chr19.peaks.tab.gz: $(COMMON_DEPS) raw/vcf/chr19.vcf.gz
+	stack exec dnamotifs -- $(OPTIONS) --chromosome 19 --vcf raw/vcf/chr19.vcf.gz --output-file chr19.peaks.tab.gz
 
-chrX.peaks.tab.gz: hg38.fa chrX.bed raw/vcf/chrX.vcf.gz HOCOMOCOv11_core_pwms_HUMAN_mono.txt hocomoco_thresholds.tab
-	stack exec dnamotifs -- X $(ALL_BED) $^ $@
+chr20.peaks.tab.gz: $(COMMON_DEPS) raw/vcf/chr20.vcf.gz
+	stack exec dnamotifs -- $(OPTIONS) --chromosome 20 --vcf raw/vcf/chr20.vcf.gz --output-file chr20.peaks.tab.gz
+
+chr21.peaks.tab.gz: $(COMMON_DEPS) raw/vcf/chr21.vcf.gz
+	stack exec dnamotifs -- $(OPTIONS) --chromosome 21 --vcf raw/vcf/chr21.vcf.gz --output-file chr21.peaks.tab.gz
+
+chr22.peaks.tab.gz: $(COMMON_DEPS) raw/vcf/chr22.vcf.gz
+	stack exec dnamotifs -- $(OPTIONS) --chromosome 22 --vcf raw/vcf/chr22.vcf.gz --output-file chr22.peaks.tab.gz
+
+chrX.peaks.tab.gz: $(COMMON_DEPS) raw/vcf/chrX.vcf.gz
+	stack exec dnamotifs -- $(OPTIONS) --chromosome X --vcf raw/vcf/chrX.vcf.gz --output-file chrX.peaks.tab.gz

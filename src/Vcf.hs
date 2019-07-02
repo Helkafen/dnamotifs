@@ -109,7 +109,7 @@ readVcfWithGenotypes path regions = do
 
 
 sampleIdsInHeader :: B.ByteString -> V.Vector SampleId
-sampleIdsInHeader header = V.fromList $ map (SampleId . decodeUtf8Lenient) $ Import.takeWhile ((>0) . B.length) $ drop 9 (B.split (fromIntegral $ ord '\t') header)
+sampleIdsInHeader header = V.fromList $ map (\(i,te) -> SampleId (decodeUtf8Lenient te) i) $ zip [0..] $ Import.takeWhile ((>0) . B.length) $ drop 9 (B.split (fromIntegral $ ord '\t') header)
 
 
 parseVcfContent :: Ranges Position0 -> [B.ByteString] -> Either Error [(Range Position0, [Variant])]

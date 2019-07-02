@@ -63,7 +63,7 @@ instance Arbitrary Nucleotide where
   arbitrary = elements [a, c, g, t, n]
 
 instance Arbitrary SampleId where
-  arbitrary = elements [SampleId (T.pack "sample0"), SampleId (T.pack "sample1"), SampleId (T.pack "sample2")]
+  arbitrary = elements [SampleId (T.pack "sample0") 0, SampleId (T.pack "sample1") 1, SampleId (T.pack "sample2") 2]
 
 instance Arbitrary Haplotype where
   arbitrary = elements [HaploLeft, HaploRight]
@@ -176,14 +176,15 @@ instance TextShow Position0 where
   showb (Position p) = showb p
 
 -- The ID of a person
-newtype SampleId = SampleId T.Text
+-- Int is the position in the samples list
+data SampleId = SampleId T.Text Int
   deriving (Eq, Ord, Show, Generic)
 
 instance NFData SampleId
 
 
 instance TextShow SampleId where
-  showb (SampleId s) = showb s
+  showb (SampleId s _) = showb s
 
 
 -- 0-based (not like in a VCF, which is 1-based)

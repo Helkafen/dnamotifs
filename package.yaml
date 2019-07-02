@@ -41,6 +41,7 @@ dependencies:
 - rio
 - optparse-applicative
 - microlens
+- file-embed
 
 default-extensions: NoImplicitPrelude
 

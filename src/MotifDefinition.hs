@@ -1,4 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell #-}
+
 module MotifDefinition
   ( loadHocomocoMotifs
   , parseHocomocoMotifsContent
@@ -6,6 +8,7 @@ module MotifDefinition
   )
 where
 
+import           Data.FileEmbed (embedStringFile)
 import           TextShow (showt)
 import           RIO.Partial (read)
 import           Data.Attoparsec.Text
@@ -16,15 +19,16 @@ import           Import
 import           PatternFind
 
 
-loadHocomocoPatternsAndScoreThresholds :: HasLogFunc env => FilePath -> FilePath -> [T.Text] -> RIO env ([T.Text], Patterns)
-loadHocomocoPatternsAndScoreThresholds pwmFile thresholdsFile wantedHocomocoPatterns = do
-   thresholds <- (M.fromList . map (\l -> (firstColumn l, lastColumn l)) . T.lines) <$> readFileUtf8 thresholdsFile
-   patterns <- (M.fromList . filter ((`elem` wantedHocomocoPatterns) . fst)) <$> loadHocomocoMotifs pwmFile
+
+loadHocomocoPatternsAndScoreThresholds :: HasLogFunc env => [T.Text] -> RIO env ([T.Text], Patterns)
+loadHocomocoPatternsAndScoreThresholds wantedHocomocoPatterns = do
+   thresholds <- (M.fromList . map (\l -> (firstColumn l, lastColumn l)) . T.lines) <$> pure (T.pack $(embedStringFile "hocomoco_thresholds.tab"))
+   patterns <- (M.fromList . filter ((`elem` wantedHocomocoPatterns) . fst)) <$> loadHocomocoMotifs
    let i = M.intersectionWith Pattern (fmap (floor . (*1000)) thresholds) patterns
    let compiledPatterns = mkPatterns $ map snd $ M.toAscList i
    let patternNames = map fst $ M.toAscList i
    let (numberOfLoadedMotifs, numberOfWantedMotifs) = (length patternNames, length wantedHocomocoPatterns)
-   logInfo (display $ "Loaded motif file: " <> (T.pack pwmFile) <> " (found " <> showt numberOfLoadedMotifs <> "/" <> showt numberOfWantedMotifs <> " motifs)")
+   logInfo (display $ "Loaded motif file: (found " <> showt numberOfLoadedMotifs <> "/" <> showt numberOfWantedMotifs <> " motifs)")
    when (numberOfLoadedMotifs /= numberOfWantedMotifs) $ do
     logWarn $ display $ "The following motifs were not found: " <> T.intercalate ", " (Set.toList $ Set.difference (Set.fromList wantedHocomocoPatterns) (Set.fromList patternNames))
    pure (patternNames, compiledPatterns)
@@ -33,15 +37,13 @@ loadHocomocoPatternsAndScoreThresholds pwmFile thresholdsFile wantedHocomocoPatt
          lastColumn = read . T.unpack . T.reverse . T.takeWhile (/='\t') . T.reverse
 
 loadHocomocoMotifs
-  :: HasLogFunc env => FilePath -> RIO env [(T.Text, [Pweight])]
-loadHocomocoMotifs path = do
-  content <- readFileUtf8 path
+  :: HasLogFunc env => RIO env [(T.Text, [Pweight])]
+loadHocomocoMotifs = do
+  content <- pure (T.pack $(embedStringFile "HOCOMOCOv11_full_pwms_HUMAN_mono.txt"))
   case parseHocomocoMotifsContent content of
     Left errors -> throwM
       (  MotifLoadingError
-      $  "Load motif file "
-      <> path
-      <> ": Error. "
+      $  "Error while loading motif file. "
       <> show errors
       )
     Right patterns -> return patterns

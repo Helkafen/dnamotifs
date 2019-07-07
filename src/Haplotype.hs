@@ -1,3 +1,4 @@
+{-# LANGUAGE TupleSections #-}
 module Haplotype (buildAllHaplotypes, applyVariants, variantsToDiffs) where
 
 import qualified Data.Vector.Storable as STO
@@ -42,7 +43,7 @@ variantsToDiffs variants@(v:_) = combineBySecond (M.toList haplotypeToDiff)
           toHaplotypeId (i,h) = HaplotypeId (sampleIds v V.! i) h
 
 variantToDiffs :: Variant -> V.Vector (Int, Haplotype, Diff)
-variantToDiffs v = V.map (\i -> (i, HaploLeft, d)) (STO.convert (genotypesL v)) <> V.map (\i -> (i, HaploRight, d)) (STO.convert (genotypesR v))
+variantToDiffs v = V.map (, HaploLeft, d) (STO.convert (genotypesL v)) <> V.map (, HaploRight, d) (STO.convert (genotypesR v))
     where d = Diff (position v) (reference v) (alternative v)
 
 

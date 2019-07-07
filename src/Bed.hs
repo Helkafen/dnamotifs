@@ -42,7 +42,7 @@ readPeaks chr path = do
   case parseBedContent chr content of
     Left err ->
       throwM (BedLoadingError $ "File: " <> path <> ". Error: " <> err)
-    Right parsed -> if (rangesLength parsed == 0)
+    Right parsed -> if rangesLength parsed == 0
       then throwM (BedLoadingError $ "File: " <> path <> ". No peak loaded")
       else pure parsed
 
@@ -50,18 +50,18 @@ readPeaks chr path = do
 parseBedContent :: Chromosome -> T.Text -> Either String (Ranges Position0)
 parseBedContent chr content =
   case
-      (sort . map snd . filter ((== chr) . fst)) <$> parseOnly parser content
+      sort . map snd . filter ((== chr) . fst) <$> parseOnly parser content
     of
       Left err -> Left err
       Right intervals ->
-        case mkRanges (map (\(s, e) -> Range s e) intervals) of
+        case mkRanges (map (uncurry Range) intervals) of
           Just ranges -> Right ranges
           Nothing     -> Left "Peaks are not disjoint"
 
 
 
 parser :: Parser [(Chromosome, (Position0, Position0))]
-parser = lineParser `sepBy` (char '\n')
+parser = lineParser `sepBy` char '\n'
 
 lineParser :: Parser (Chromosome, (Position0, Position0))
 lineParser = do
@@ -69,7 +69,7 @@ lineParser = do
   s   <- decimal <* char '\t'
   e   <- decimal
   guard (s < e)
-  pure (chr, ((Position s), (Position e)))
+  pure (chr, (Position s, Position e))
 
 chromosomeParser :: Parser Chromosome
 chromosomeParser = choice [autosomeParser, xParser, yParser]

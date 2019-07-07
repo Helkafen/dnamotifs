@@ -1,7 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE BangPatterns #-}
 
 module Run where
 
@@ -93,9 +91,9 @@ genoText ge = vectorToByteString $ STO.create $ do
         mi <- newSTRef (0 :: Int)
         STO.forM_ ge $ \v -> do
             i <- readSTRef mi
-            if      v == geno00 then do STOM.unsafeWrite x (i*4) 9 >> STOM.unsafeWrite x (i*4+1) 48 >> STOM.unsafeWrite x (i*4+2) 124 >> STOM.unsafeWrite x (i*4+3) 48
-            else if v == geno01 then do STOM.unsafeWrite x (i*4) 9 >> STOM.unsafeWrite x (i*4+1) 48 >> STOM.unsafeWrite x (i*4+2) 124 >> STOM.unsafeWrite x (i*4+3) 49
-            else                     do STOM.unsafeWrite x (i*4) 9 >> STOM.unsafeWrite x (i*4+1) 49 >> STOM.unsafeWrite x (i*4+2) 124 >> STOM.unsafeWrite x (i*4+3) 49
+            if      v == geno00 then STOM.unsafeWrite x (i*4) 9 >> STOM.unsafeWrite x (i*4+1) 48 >> STOM.unsafeWrite x (i*4+2) 124 >> STOM.unsafeWrite x (i*4+3) 48
+            else if v == geno01 then STOM.unsafeWrite x (i*4) 9 >> STOM.unsafeWrite x (i*4+1) 48 >> STOM.unsafeWrite x (i*4+2) 124 >> STOM.unsafeWrite x (i*4+3) 49
+            else                     STOM.unsafeWrite x (i*4) 9 >> STOM.unsafeWrite x (i*4+1) 49 >> STOM.unsafeWrite x (i*4+2) 124 >> STOM.unsafeWrite x (i*4+3) 49
             modifySTRef mi (+1)
         return x
     where len = STO.length ge

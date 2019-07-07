@@ -5,12 +5,12 @@ import Test.Framework
 
 import qualified Data.Vector.Storable            as STO
 import qualified Data.Vector                     as V
-import qualified Data.Vector.Generic             as G
 import           Data.Monoid                     ((<>))
+import           Foreign.C.Types                 (CInt)
+import qualified Data.Vector.Generic             as G
 import qualified Data.Text                       as T
 import qualified Data.ByteString                 as B
 import qualified Data.Set                        as Set
-import           Foreign.C.Types                 (CInt)
 import           Data.Text.Encoding              (encodeUtf8)
 import qualified Data.Map
 import           Data.Char                       (ord)
@@ -281,7 +281,7 @@ test_variantsToDiffs_1 = do
   let sampleIdentifiers = G.fromList [sample1, sample2]
   let var = Variant (Chromosome "1") (Position 69080) (Just "1:69081:G:C") (mkSeq [c]) (mkSeq [g]) (G.fromList [0]) (G.fromList [1]) sampleIdentifiers
   let diffs = variantsToDiffs [var]
-  let expected = Data.Map.fromList [(V.singleton (Diff (Position 69080) (mkSeq [c]) (mkSeq [g])),  [HaplotypeId (sample2) HaploRight, HaplotypeId (sample1) HaploLeft])]
+  let expected = Data.Map.fromList [(V.singleton (Diff (Position 69080) (mkSeq [c]) (mkSeq [g])),  [HaplotypeId sample2 HaploRight, HaplotypeId sample1 HaploLeft])]
   assertEqual expected diffs
 
 test_variantsToDiffs_2 :: IO ()
@@ -294,9 +294,9 @@ test_variantsToDiffs_2 = do
   let diff1 = Diff (Position 69080) (mkSeq [c]) (mkSeq [g])
   let diff2 = Diff (Position 69079) (mkSeq [a]) (mkSeq [t])
   let diff4 = Diff (Position 69078) (mkSeq [t]) (mkSeq [g])
-  let expected = Data.Map.fromList [(V.fromList [diff4],       [HaplotypeId (sample1) HaploRight])
-                                   ,(V.fromList [diff2,diff1], [HaplotypeId (sample1) HaploLeft])
-                                   ,(V.fromList [diff1],       [HaplotypeId (sample2) HaploRight])]
+  let expected = Data.Map.fromList [(V.fromList [diff4],       [HaplotypeId sample1 HaploRight])
+                                   ,(V.fromList [diff2,diff1], [HaplotypeId sample1 HaploLeft])
+                                   ,(V.fromList [diff1],       [HaplotypeId sample2 HaploRight])]
   assertEqual expected diffs
 
 test_processPeak_1 :: IO()
@@ -323,11 +323,11 @@ test_processPeak_1 = do
   assertEqual 3 numberOfHaplotypes -- Including the reference genome. Only on interval [3->7]
   assertEqual 2 numberOfVariants
   assertEqual 7 numberOfMatches
-  let expectedMatches = [Match 3 4000 4 [HaplotypeId (sample0) HaploRight, HaplotypeId (sample1) HaploLeft] [c,c,c,g], -- This line matches the reference genome
-                         Match 0 2000 6 [HaplotypeId (sample0) HaploRight, HaplotypeId (sample1) HaploLeft] [c,g],
-                         Match 1 2000 3 [HaplotypeId (sample0) HaploLeft]                                              [a,t],
-                         Match 2 2000 4 [HaplotypeId (sample0) HaploLeft]                                              [t,c],
-                         Match 0 2000 6 [HaplotypeId (sample0) HaploLeft]                                              [c,g]]
+  let expectedMatches = [Match 3 4000 4 [HaplotypeId sample0 HaploRight, HaplotypeId sample1 HaploLeft] [c,c,c,g], -- This line matches the reference genome
+                         Match 0 2000 6 [HaplotypeId sample0 HaploRight, HaplotypeId sample1 HaploLeft] [c,g],
+                         Match 1 2000 3 [HaplotypeId sample0 HaploLeft]                                              [a,t],
+                         Match 2 2000 4 [HaplotypeId sample0 HaploLeft]                                              [t,c],
+                         Match 0 2000 6 [HaplotypeId sample0 HaploLeft]                                              [c,g]]
   assertEqual (V.fromList expectedMatches) matches
 
 --test_countsInPeak_1 :: IO ()

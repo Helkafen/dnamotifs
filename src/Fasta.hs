@@ -25,14 +25,13 @@ loadFasta
   -> RIO env (Range Position0 -> BaseSequencePosition, Int)
 loadFasta (Chromosome chr) filename = do -- BL.head is safe because we filtered out the empty lines earlier
   alphaBaseSequence <-
-    ( BL.toStrict
+      BL.toStrict
       . BL.concat
       . takeWhile (\l -> BLP.head l /= separator)
       . tail
       . dropWhile (/= wantedHeader)
       . filter (not . BL.null)
       . BLC.lines
-      )
       <$> BL.readFile filename
   if B.length alphaBaseSequence == 0
     then throwM
@@ -41,7 +40,7 @@ loadFasta (Chromosome chr) filename = do -- BL.head is safe because we filtered 
       <> filename
       <> ": sequence is empty"
       )
-    else logInfo (display $ "Loaded reference genome: " <> (T.pack filename))
+    else logInfo (display $ "Loaded reference genome: " <> T.pack filename)
   pure (takeRef alphaBaseSequence, B.length alphaBaseSequence)
  where
   separator    = fromIntegral (ord '>') :: Word8

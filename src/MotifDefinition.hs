@@ -22,14 +22,14 @@ import           PatternFind
 
 loadHocomocoPatternsAndScoreThresholds :: HasLogFunc env => [T.Text] -> RIO env ([T.Text], Patterns)
 loadHocomocoPatternsAndScoreThresholds wantedHocomocoPatterns = do
-   thresholds <- (M.fromList . map (\l -> (firstColumn l, lastColumn l)) . T.lines) <$> pure (T.pack $(embedStringFile "hocomoco_thresholds.tab"))
-   patterns <- (M.fromList . filter ((`elem` wantedHocomocoPatterns) . fst)) <$> loadHocomocoMotifs
+   thresholds <- M.fromList . map (\l -> (firstColumn l, lastColumn l)) . T.lines <$> pure (T.pack $(embedStringFile "hocomoco_thresholds.tab"))
+   patterns <- M.fromList . filter ((`elem` wantedHocomocoPatterns) . fst) <$> loadHocomocoMotifs
    let i = M.intersectionWith Pattern (fmap (floor . (*1000)) thresholds) patterns
    let compiledPatterns = mkPatterns $ map snd $ M.toAscList i
    let patternNames = map fst $ M.toAscList i
    let (numberOfLoadedMotifs, numberOfWantedMotifs) = (length patternNames, length wantedHocomocoPatterns)
    logInfo (display $ "Loaded motif file. Found " <> showt numberOfLoadedMotifs <> "/" <> showt numberOfWantedMotifs <> " motifs")
-   when (numberOfLoadedMotifs /= numberOfWantedMotifs) $ do
+   when (numberOfLoadedMotifs /= numberOfWantedMotifs) $
     logWarn $ display $ "The following motifs were not found: " <> T.intercalate ", " (Set.toList $ Set.difference (Set.fromList wantedHocomocoPatterns) (Set.fromList patternNames))
    pure (patternNames, compiledPatterns)
    where firstColumn = T.takeWhile (/='\t')
@@ -38,7 +38,7 @@ loadHocomocoPatternsAndScoreThresholds wantedHocomocoPatterns = do
 
 loadHocomocoMotifs :: RIO env [(T.Text, [Pweight])]
 loadHocomocoMotifs = do
-  content <- pure (T.pack $(embedStringFile "HOCOMOCOv11_full_pwms_HUMAN_mono.txt"))
+  let content = T.pack $(embedStringFile "HOCOMOCOv11_full_pwms_HUMAN_mono.txt")
   case parseHocomocoMotifsContent content of
     Left errors -> throwM
       (  MotifLoadingError

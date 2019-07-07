@@ -90,7 +90,7 @@ readGzippedLines :: FilePath -> RIO env [B.ByteString]
 readGzippedLines path = map BL.toStrict . BLC.lines . GZip.decompress <$> BL.readFile path
 
 filterOrderedIntervals :: Ord a => (b->a) -> Ranges a -> [b] -> [(Range a, [b])]
-filterOrderedIntervals pos ranges xs = go (getRanges ranges) xs
+filterOrderedIntervals pos ranges = go (getRanges ranges)
     where go [] _ = []
           go (r@(Range start end):rs) l = 
             let (vs, rest) =  span ((<=end) . pos) $ dropWhile ((<start) . pos) l
@@ -100,10 +100,10 @@ filterOrderedIntervals pos ranges xs = go (getRanges ranges) xs
 readVcfWithGenotypes :: HasLogFunc env => FilePath -> Ranges Position0 -> RIO env ([SampleId], [(Range Position0, [Variant])])
 readVcfWithGenotypes path regions = do
     logInfo (display $ T.pack ("Loading VCF file " <> path))
-    vcf <- (parseVcfContent regions . dropWhile ("##" `B.isPrefixOf`)) <$> readGzippedLines path
+    vcf <- parseVcfContent regions . dropWhile ("##" `B.isPrefixOf`) <$> readGzippedLines path
     case vcf of
       Left err -> throwM err
-      Right [] -> throwM (VcfLoadingError ("No variant loaded"))
+      Right [] -> throwM (VcfLoadingError "No variant loaded")
       Right ((_, []):_) -> throwM (VcfLoadingError "No variant loaded in the first peak")
       Right variants@((_,x:_):_) -> pure (V.toList (sampleIds x), variants)
 
@@ -135,7 +135,7 @@ chromosomeParser = choice [autosomeParser, xParser, yParser]
 
 variantIdParser :: Parser (Maybe T.Text)
 variantIdParser = choice [none, rs] <?> "variant_name"
-    where rs = (Just . decodeUtf8Lenient . B.pack) <$> many1 (notWord8 tab)
+    where rs = Just . decodeUtf8Lenient . B.pack <$> many1 (notWord8 tab)
           none = word8 dot $> Nothing
 
 dot, tab, newline :: Word8
@@ -146,10 +146,10 @@ newline = fromIntegral (ord '\n')
 variantParser :: V.Vector SampleId -> Parser Variant
 variantParser sampleIdentifiers = do
     chr <- chromosomeParser <* word8 tab
-    pos <- (Position . (\x -> x - 1)) <$> decimal <* word8 tab
+    pos <- Position . (\x -> x - 1) <$> decimal <* word8 tab
     name <- variantIdParser <* word8 tab
-    ref <- (B.pack . map (unNuc . toNuc . fromIntegral . ord)) <$> many1 letter_ascii <* word8 tab
-    alt <- (B.pack . map (unNuc . toNuc . fromIntegral . ord))  <$> many1 letter_ascii <* word8 tab
+    ref <- B.pack . map (unNuc . toNuc . fromIntegral . ord) <$> many1 letter_ascii <* word8 tab
+    alt <- B.pack . map (unNuc . toNuc . fromIntegral . ord)  <$> many1 letter_ascii <* word8 tab
     skipField >> skipField >> skipField >> skipField
     (genoL, genoR) <- fillVector <$> takeWhile1 (/=newline)
     _ <- option newline (word8 newline)

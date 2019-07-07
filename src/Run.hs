@@ -11,12 +11,10 @@ import qualified Data.Vector.Storable as STO
 import qualified Data.Vector.Storable.Mutable as STOM
 import qualified Data.ByteString as B
 import qualified Data.Text as T
-import qualified Data.Text.Lazy as TL
-import qualified Data.Text.Lazy.Builder as TLB
 import qualified Data.Text.Encoding as TE
 import           TextShow (showt)
 import qualified RIO.Set as Set
-import           RIO.List (iterate, intercalate, intersperse)
+import           RIO.List (iterate, intercalate)
 import qualified RIO.List.Partial as LP
 import           Pipes (Producer, yield, (>->), runEffect)
 import           Pipes.GZip (compress, defaultCompression)
@@ -25,12 +23,6 @@ import           System.IO (IOMode(..))
 import           Text.Printf (printf)
 import           Data.STRef (newSTRef, readSTRef, writeSTRef, modifySTRef)
 import           Data.Vector.Storable.ByteString (vectorToByteString)
-
-import qualified Language.C.Inline               as C
-import           System.IO.Unsafe (unsafePerformIO)
-import           Foreign.C.Types                 (CInt, CChar)
-import           Foreign                         (Ptr, FunPtr)
-import           Foreign.ForeignPtr              (newForeignPtr)
 
 
 import Types
@@ -84,7 +76,6 @@ processPeaks t0 fakePos chr@(Chromosome chro) (patternNames, patterns) takeRefer
         let qualStr = "."
         let filterStr = "."
         let infoStr = "COUNTS=" <> T.intercalate "," (map showt (Set.toList s))
-        let genotypesStr = TL.toStrict $ TLB.toLazyText $ mconcat $ map TLB.fromText (intersperse "\t" (map (\x -> if x == geno00 then "0|0" else if x == geno11 then "1|1" else "0|1") (STO.toList genotypes)))
         yield $ TE.encodeUtf8 $ T.intercalate "\t" [chro, posStr, idStr, refStr, altStr, qualStr, filterStr, infoStr]
         yield (genoText genotypes)
         yield "\n"

@@ -9,7 +9,6 @@ import qualified Data.Vector.Generic             as G
 import           Data.Monoid                     ((<>))
 import qualified Data.Text                       as T
 import qualified Data.ByteString                 as B
-import qualified Data.Map                        as M
 import qualified Data.Set                        as Set
 import           Foreign.C.Types                 (CInt)
 import           Data.Text.Encoding              (encodeUtf8)
@@ -411,7 +410,5 @@ prop_encodeNumberOfMatchesAsGenotypes_2 xs = snd (encodeNumberOfMatchesAsGenotyp
           positiveXs = positive xs
 
 main :: IO ()
-
-
 main =
   htfMainWithArgs ["--quiet"] htf_thisModulesTests

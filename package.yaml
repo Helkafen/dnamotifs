@@ -84,8 +84,8 @@ tests:
   cmodule-test:
     main: Main.hs
     source-dirs:
+      - src
       - test
     dependencies:
       - QuickCheck
       - HTF
-      - dnamotifs

@@ -36,8 +36,7 @@ loadHocomocoPatternsAndScoreThresholds wantedHocomocoPatterns = do
          lastColumn :: T.Text -> Double
          lastColumn = read . T.unpack . T.reverse . T.takeWhile (/='\t') . T.reverse
 
-loadHocomocoMotifs
-  :: HasLogFunc env => RIO env [(T.Text, [Pweight])]
+loadHocomocoMotifs :: RIO env [(T.Text, [Pweight])]
 loadHocomocoMotifs = do
   content <- pure (T.pack $(embedStringFile "HOCOMOCOv11_full_pwms_HUMAN_mono.txt"))
   case parseHocomocoMotifsContent content of

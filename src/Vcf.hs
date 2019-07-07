@@ -48,7 +48,8 @@ parseV line line_length = [C.block| int* {
           int count_l = 0;
           int count_r = 0;
 
-          for(int i,j = 0; i<length - 2; i=i+4, j++) {
+
+          for(int i = 0, j = 0; i<length - 2; i=i+4, j++) {
             if(in[i] == '1')
               resultL[count_l++] = j;
             if(in[i+2] == '1')
@@ -84,7 +85,6 @@ fillVector s = unsafePerformIO go
                 let right = STO.take lenR (STO.drop (2+lenL) vec)
                 pure (left, right)
         len = fromIntegral (B.length s)
-
 
 readGzippedLines :: FilePath -> RIO env [B.ByteString]
 readGzippedLines path = map BL.toStrict . BLC.lines . GZip.decompress <$> BL.readFile path
